@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Analysis (measurement correctness)
+        run: node test/analysis.test.js
+      - name: Scoring (plateau, bounds, weights)
+        run: node test/scoring.test.js
+      - name: Face shape (classification)
+        run: node test/faceshape.test.js
+      - name: Skin signals (pixel sampling)
+        run: node test/skin.test.js
+      - name: Recommendations (rules, dedupe, cap)
+        run: node test/recommendations.test.js
+      - name: Smoke (full pipeline via browser load path)
+        run: node test/smoke.test.js

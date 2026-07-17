@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="author" content="Caio·MSI">
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="mask-icon" href="favicon.svg" color="#5ad1e6">
+
+  <!-- ============================================================
+       Contour — an in-browser facial-proportion analysis tool.
+       Hosted at caiomsi.github.io/Contour. All analysis is
+       client-side; no photo ever leaves the device.
+       ============================================================ -->
+  <title>Contour — Facial proportion analysis, entirely in your browser</title>
+  <meta name="description" content="Contour maps your facial proportions on-device, scores them against common reference ranges, and turns the observations into a practical, lifestyle-only action plan. Your photo never leaves your device.">
+  <link rel="canonical" href="https://caiomsi.github.io/Contour/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Contour — Measured, not judged">
+  <meta property="og:description" content="On-device facial-proportion analysis with a practical, lifestyle-only action plan. Your photo never leaves your browser.">
+  <meta property="og:url" content="https://caiomsi.github.io/Contour/">
+  <meta property="og:site_name" content="Contour">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:image" content="https://caiomsi.github.io/Contour/images/social-share.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Contour — in-browser facial proportion analysis">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Contour — Measured, not judged">
+  <meta name="twitter:description" content="On-device facial-proportion analysis with a practical, lifestyle-only action plan. Your photo never leaves your browser.">
+  <meta name="twitter:image" content="https://caiomsi.github.io/Contour/images/social-share.png">
+  <meta name="theme-color" content="#08090b">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Contour",
+    "url": "https://caiomsi.github.io/Contour/",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Any (web browser)",
+    "browserRequirements": "Requires a modern browser with WebAssembly",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "description": "In-browser facial-proportion analysis. Maps facial landmarks on-device, scores proportions against common reference ranges, and generates a lifestyle-only action plan. No photo is uploaded.",
+    "isAccessibleForFree": true,
+    "author": { "@type": "Person", "name": "Caio·MSI" }
+  }
+  </script>
+</head>
+<body data-view="landing">
+
+  <!-- ============================ TOP BAR ============================ -->
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Contour — home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-word">Contour</span>
+    </a>
+    <nav class="topnav" aria-label="Primary">
+      <a href="#methodology" data-nav="methodology">Methodology</a>
+      <span class="privacy-pill" title="All processing happens on your device">
+        <span class="dot" aria-hidden="true"></span> On-device
+      </span>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- ============================ LANDING ============================ -->
+    <section class="view is-active" id="view-landing" aria-label="Introduction">
+      <div class="hero container">
+        <p class="kicker">Facial proportion analysis · runs in your browser</p>
+        <h1 class="hero-title">Measured,<br><em>not judged.</em></h1>
+        <p class="hero-lede">
+          Contour maps your facial proportions with an on-device model, scores them
+          against common (and culture-bound) reference ranges, and turns the
+          observations into a practical, <strong>lifestyle-only</strong> action plan —
+          sleep, skin, hydration, habits, and styling.
+        </p>
+        <div class="hero-actions">
+          <button class="btn btn-solid" id="cta-upload">Analyze a photo</button>
+          <button class="btn btn-ghost" id="cta-camera">Use camera</button>
+        </div>
+        <ul class="trust-row" aria-label="How your data is handled">
+          <li><span class="tick" aria-hidden="true"></span> Runs 100% in your browser</li>
+          <li><span class="tick" aria-hidden="true"></span> No upload · no account</li>
+          <li><span class="tick" aria-hidden="true"></span> Your photo never leaves the device</li>
+        </ul>
+        <p class="ethics-strip">
+          For curiosity and self-care — not a beauty verdict, diagnosis, or medical
+          advice. Proportion “ideals” are cultural heuristics, not objective truth.
+          Intended for adults.
+        </p>
+        <p class="engine-status" id="engine-status" role="status">Loading the on-device model…</p>
+      </div>
+    </section>
+
+    <!-- ============================ CAPTURE ============================ -->
+    <section class="view" id="view-capture" aria-label="Add a photo">
+      <div class="container capture-wrap">
+        <button class="back-link" data-goto="landing">← Back</button>
+        <h2 class="view-title">Add a clear, front-facing photo</h2>
+
+        <div class="capture-panels">
+          <!-- Upload -->
+          <div class="capture-panel" id="panel-upload">
+            <label class="dropzone" id="dropzone">
+              <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp" hidden>
+              <span class="dropzone-icon" aria-hidden="true"></span>
+              <span class="dropzone-title">Drop a photo or click to browse</span>
+              <span class="dropzone-sub">PNG, JPG or WebP · stays on your device</span>
+            </label>
+          </div>
+
+          <!-- Camera -->
+          <div class="capture-panel" id="panel-camera" hidden>
+            <div class="camera-stage">
+              <video id="camera-video" playsinline autoplay muted></video>
+              <div class="camera-guide" aria-hidden="true"></div>
+            </div>
+            <div class="camera-actions">
+              <button class="btn btn-solid" id="camera-shoot">Capture</button>
+              <button class="btn btn-ghost" id="camera-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <ul class="tips" aria-label="For best results">
+          <li>Face the camera straight-on, eyes level</li>
+          <li>Neutral expression, mouth closed</li>
+          <li>Even, front-facing light — avoid backlight</li>
+          <li>Hair off the forehead if you can; glasses off</li>
+          <li>Arm’s length or further (close selfies distort proportions)</li>
+        </ul>
+
+        <div class="retake" id="retake" hidden role="alert"></div>
+      </div>
+    </section>
+
+    <!-- ============================ ANALYZING ============================ -->
+    <section class="view" id="view-analyzing" aria-label="Analyzing">
+      <div class="container analyzing-wrap">
+        <div class="pulse" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="analyzing-text" id="analyzing-text">Detecting facial landmarks…</p>
+      </div>
+    </section>
+
+    <!-- ============================ REPORT ============================ -->
+    <section class="view" id="view-report" aria-label="Your report">
+      <div class="container report-wrap">
+
+        <!-- composite header -->
+        <div class="report-head">
+          <div class="composite">
+            <div class="composite-ring" id="composite-ring">
+              <span class="composite-num" id="composite-num">—</span>
+              <span class="composite-scale">/100</span>
+            </div>
+            <div class="composite-meta">
+              <p class="composite-label">Harmony composite</p>
+              <p class="composite-note">A weighted blend of the proportion scores below. It is one lens, not a verdict.</p>
+              <div class="badges">
+                <span class="badge" id="confidence-badge">Confidence: —</span>
+                <span class="badge badge-privacy">This photo stayed on your device</span>
+              </div>
+            </div>
+          </div>
+          <div class="report-actions">
+            <button class="btn btn-ghost" id="btn-print">Save as PDF</button>
+            <button class="btn btn-solid" data-goto="capture" id="btn-again">Analyze another</button>
+          </div>
+        </div>
+
+        <!-- annotated photo + overlays -->
+        <div class="report-grid">
+          <div class="figure-col">
+            <figure class="annot">
+              <canvas id="annot-canvas" aria-label="Your photo with measurement overlays"></canvas>
+            </figure>
+            <div class="overlay-toggles" id="overlay-toggles" role="group" aria-label="Overlay layers"></div>
+            <p class="hairline-hint" id="hairline-hint">Drag the dashed line to your hairline to refine the thirds.</p>
+          </div>
+
+          <div class="side-col">
+            <div class="card shape-card" id="shape-card"></div>
+            <div class="card summary-card" id="summary-card"></div>
+          </div>
+        </div>
+
+        <!-- feature score cards -->
+        <h3 class="section-label"><span class="folio">01</span> Proportions</h3>
+        <div class="feature-grid" id="feature-grid"></div>
+
+        <!-- personalized plan -->
+        <h3 class="section-label"><span class="folio">02</span> Your action plan</h3>
+        <p class="section-intro">Lifestyle-only suggestions, ordered by relevance to what Contour observed. Nothing here is medical or surgical advice.</p>
+        <div class="plan" id="plan"></div>
+
+        <!-- methodology -->
+        <h3 class="section-label" id="methodology"><span class="folio">03</span> Methodology &amp; limits</h3>
+        <div class="accordion" id="methodology-body"></div>
+
+        <!-- debug (only with ?debug=1) -->
+        <div class="debug-panel" id="debug-panel" hidden>
+          <h3 class="section-label"><span class="folio">DBG</span> Debug</h3>
+          <div class="debug-actions">
+            <button class="btn btn-ghost" id="dbg-export">Export landmarks JSON</button>
+            <button class="btn btn-ghost" id="dbg-indices">Toggle all indices</button>
+          </div>
+          <pre class="debug-dump" id="debug-dump"></pre>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <p>Contour — a <a href="https://caiomsi.com" target="_blank" rel="noopener">Caio·MSI</a> side project.</p>
+      <p class="footer-disc">Not medical advice. Proportion “ideals” are culture-bound heuristics, not objective beauty. Your photos are processed entirely on your device.</p>
+    </div>
+  </footer>
+
+  <!-- MediaPipe glue (ES module) then the app (plain script). -->
+  <script type="module" src="js/landmarker.js"></script>
+  <script src="js/geometry.js"></script>
+  <script src="js/analysis.js"></script>
+  <script src="js/faceshape.js"></script>
+  <script src="js/scoring.js"></script>
+  <script src="js/skin.js"></script>
+  <script src="js/gates.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/recommendations.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
