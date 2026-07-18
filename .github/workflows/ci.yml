@@ -23,5 +23,7 @@ jobs:
         run: node test/skin.test.js
       - name: Recommendations (rules, dedupe, cap)
         run: node test/recommendations.test.js
+      - name: History (local progress storage)
+        run: node test/history.test.js
       - name: Smoke (full pipeline via browser load path)
         run: node test/smoke.test.js

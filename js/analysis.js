@@ -41,6 +41,7 @@
     BROW_R: 105, BROW_L: 334,
     FOREHEAD_R: 54, FOREHEAD_L: 284,   // frontotemporale (verify)
     CHEEK_R: 116, CHEEK_L: 345,
+    MIDCHEEK_R: 205, MIDCHEEK_L: 425,   // frontal-lit mid-cheek (skin sampling)
     JAW_R: 172, JAW_L: 397,            // gonion-ish (verify)
     GONION_R: 58, GONION_L: 288
   };

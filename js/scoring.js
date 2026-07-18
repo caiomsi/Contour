@@ -22,19 +22,26 @@
   // Use -Infinity / Infinity for "lower/higher is simply better".
   var NINF = -Infinity, PINF = Infinity;
 
+  // Bands were re-centered against a small, deliberately diverse set of
+  // frontal reference faces (see CLAUDE.md "Scoring & tuning"): the raw
+  // neoclassical targets scored ordinary, symmetric faces poorly —
+  // especially eye spacing and nose width, whose canonical "ideals" are
+  // Eurocentric-tight and don't match MediaPipe's landmark placement.
+  // Plateaus are wide on purpose: low scores are reserved for genuinely
+  // large deviations, not everyday variation.
   var BANDS = {
     // lower-is-better deviation metrics
-    thirds:      { a: NINF, b: NINF, c: 0.03,  d: 0.13,  dir: 'low',  fmt: 'dev' },
-    fifths:      { a: NINF, b: NINF, c: 0.025, d: 0.10,  dir: 'low',  fmt: 'dev' },
+    thirds:      { a: NINF, b: NINF, c: 0.035, d: 0.14,  dir: 'low',  fmt: 'dev' },
+    fifths:      { a: NINF, b: NINF, c: 0.03,  d: 0.11,  dir: 'low',  fmt: 'dev' },
     symmetry:    { a: NINF, b: NINF, c: 0.05,  d: 0.16,  dir: 'low',  fmt: 'dev' },
     // target-range metrics
-    canthal:     { a: -6,   b: 1,    c: 8,     d: 16,    dir: 'mid',  fmt: 'deg' },
-    interocular: { a: 0.72, b: 0.90, c: 1.10,  d: 1.30,  dir: 'mid',  fmt: 'ratio' },
-    nose:        { a: 0.72, b: 0.88, c: 1.12,  d: 1.35,  dir: 'mid',  fmt: 'ratio' },
-    mouthNose:   { a: 1.15, b: 1.40, c: 1.70,  d: 1.95,  dir: 'mid',  fmt: 'ratio' },
+    canthal:     { a: -6,   b: 1,    c: 10,    d: 18,    dir: 'mid',  fmt: 'deg' },
+    interocular: { a: 0.95, b: 1.10, c: 1.42,  d: 1.60,  dir: 'mid',  fmt: 'ratio' },
+    nose:        { a: 0.75, b: 0.90, c: 1.25,  d: 1.55,  dir: 'mid',  fmt: 'ratio' },
+    mouthNose:   { a: 1.10, b: 1.30, c: 1.65,  d: 1.95,  dir: 'mid',  fmt: 'ratio' },
     lips:        { a: 0.30, b: 0.45, c: 0.72,  d: 1.05,  dir: 'mid',  fmt: 'ratio' },
     midface:     { a: 0.40, b: 0.48, c: 0.60,  d: 0.72,  dir: 'mid',  fmt: 'ratio' },
-    fwhr:        { a: 1.50, b: 1.75, c: 2.05,  d: 2.35,  dir: 'mid',  fmt: 'ratio' },
+    fwhr:        { a: 1.55, b: 1.75, c: 2.20,  d: 2.55,  dir: 'mid',  fmt: 'ratio' },
     skin:        { a: 0,    b: 55,   c: 100,   d: 100,   dir: 'high', fmt: 'score' }
   };
 

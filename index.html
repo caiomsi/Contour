@@ -113,10 +113,10 @@
           <!-- Upload -->
           <div class="capture-panel" id="panel-upload">
             <label class="dropzone" id="dropzone">
-              <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp" hidden>
+              <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" hidden>
               <span class="dropzone-icon" aria-hidden="true"></span>
               <span class="dropzone-title">Drop a photo or click to browse</span>
-              <span class="dropzone-sub">PNG, JPG or WebP · stays on your device</span>
+              <span class="dropzone-sub">PNG, JPG, WebP or HEIC · stays on your device</span>
             </label>
           </div>
 
@@ -126,6 +126,7 @@
               <video id="camera-video" playsinline autoplay muted></video>
               <div class="camera-guide" aria-hidden="true"></div>
             </div>
+            <ul class="camera-hints" id="camera-hints" aria-live="polite"></ul>
             <div class="camera-actions">
               <button class="btn btn-solid" id="camera-shoot">Capture</button>
               <button class="btn btn-ghost" id="camera-cancel">Cancel</button>
@@ -192,6 +193,7 @@
           <div class="side-col">
             <div class="card shape-card" id="shape-card"></div>
             <div class="card summary-card" id="summary-card"></div>
+            <div class="card history-card" id="history-card" hidden></div>
           </div>
         </div>
 
@@ -240,6 +242,7 @@
   <script src="js/gates.js"></script>
   <script src="js/content.js"></script>
   <script src="js/recommendations.js"></script>
+  <script src="js/history.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

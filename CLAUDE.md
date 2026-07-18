@@ -41,11 +41,14 @@ js/geometry.js          pure: vec math, roll-correction, Euler-from-matrix (COLU
 js/analysis.js          pure: landmarks → measurements (LM index map lives here)
 js/faceshape.js         pure: measurements → oval/round/square/heart/diamond/oblong
 js/scoring.js           pure: BANDS + WEIGHTS tables → 0–100 + composite
-js/skin.js              pure: pixel-region sampling → under-eye / redness signals
+js/skin.js              pure: pixel sampling → under-eye/redness signals + detectHairlineY
 js/gates.js             pure: quality gates + confidence (THRESH table)
 js/content.js           recommendation content pack (data only)
 js/recommendations.js   pure rules engine: findings → prioritized, deduped, capped recs
-js/main.js              plain IIFE: capture, gates, canvas overlays, report render, debug
+js/history.js           pure: local progress history (scores only, injected storage)
+js/main.js              plain IIFE: capture + live camera hints, gates, overlays, report, debug
+vendor/mediapipe/       vendored tasks-vision runtime (bundle + wasm) — no runtime CDN
+vendor/heic2any.min.js  vendored HEIC decoder, lazy-loaded only for .heic/.heif uploads
 models/face_landmarker.task   vendored model (~3.6MB, loaded same-origin)
 test/*.test.js          zero-dep Node tests (+ fixtures/)
 ```
@@ -58,21 +61,37 @@ path) to prove that wiring.
 ## Pipeline (main.js runPipeline)
 
 `ContourEngine.detect(canvas)` → **gates** (face count, size, pose, expression,
-exposure) → if blocked, show retake and stop → else `analysis.analyze` (roll-corrected,
-IPD-normalized) → `skin.compute` → `scoring.score` → `faceshape.classify` →
-`recommendations.generate` → render. The annotated canvas is drawn roll-corrected;
-overlays use `measurements.corrected` coordinates. The hairline handle is draggable
-(trichion isn't in the mesh) and live-recomputes the thirds.
+exposure; shared with the live camera hints via `evaluateGates`) → if blocked, show
+retake and stop → else `analysis.analyze` (roll-corrected, IPD-normalized) →
+**auto-hairline** (`skin.detectHairlineY` walks up the midline for a dark-hair
+transition; null → heuristic default) → `skin.compute` → `scoring.score` →
+`faceshape.classify` → `recommendations.generate` → render + **record history**
+(`history.js`, localStorage, scores only — never photos/landmarks). The annotated
+canvas is drawn roll-corrected; overlays use `measurements.corrected` coordinates.
+The hairline handle stays draggable and live-recomputes thirds (and patches the
+history entry on release).
+
+**Camera** runs a live-hint loop pre-capture: ~2.5×/s it detects on a video frame,
+runs the same pure gates, and maps gate ids to short directions (HINT_TEXT).
+**HEIC uploads**: Safari decodes natively; elsewhere `decodeFile` lazy-loads
+`vendor/heic2any.min.js` and converts on-device.
 
 ## Scoring & tuning
 
 `scoring.js` holds the **only** place to tune: `BANDS` (per-metric ideal/falloff via
 a piecewise-linear plateau) and `WEIGHTS` (composite, sums to 1). These are
-literature-informed heuristics, **not truths** — say so if surfacing them. They were
-lightly calibrated against real faces during verification: notably the `midface` band
-(a normal face is ~0.5×, not ~0.9×) and the default hairline, which lifts ~8.5% of
-face-height above landmark 10 toward the real trichion. Recalibrating against more
-faces is welcome; keep the plateau shape.
+literature-informed heuristics, **not truths** — say so if surfacing them.
+
+**Calibration provenance (v1.1):** bands were re-centered against a small,
+deliberately diverse set of synthetic frontal reference faces after the raw
+neoclassical targets scored ordinary faces badly — eye spacing measured 1.17–1.42
+on every normal face (canonical "1.0" doesn't match MediaPipe landmark placement)
+and nose/mouth ratios sat outside their canonical bands. Plateaus are wide on
+purpose: low scores are reserved for genuinely large deviations. The redness skin
+signal is **self-referenced** (cheeks vs the person's own forehead/chin baseline)
+because an absolute R-vs-GB index misreads warmer skin tones as "redness."
+Recalibrating against more faces is welcome; keep the plateau shape, keep
+`interocular.d ≤ 1.6` (a test pins it), and keep weights summing to 1.
 
 ## Pose / MediaPipe notes
 

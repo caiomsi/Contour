@@ -108,7 +108,9 @@ strong{color:var(--ivory);font-weight:600}
 .tick::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;
   border:solid var(--accent);border-width:0 2px 2px 0;transform:rotate(45deg)}
 .ethics-strip{max-width:60ch;font-size:.88rem;color:var(--stone);
-  border-left:2px solid var(--accent-dim);padding:.2rem 0 .2rem 1rem;margin:0 0 1.6rem}
+  border-left:2px solid var(--accent-dim);padding:.2rem 0 .2rem 1rem;margin:0 0 1.6rem;
+  transition:border-color .4s,color .4s}
+.ethics-strip.flash{border-left-color:var(--accent-bright);color:var(--parchment)}
 .engine-status{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.05em;color:var(--stone)}
 .engine-status.ready{color:var(--accent-bright)}
 .engine-status.err{color:var(--note)}
@@ -145,6 +147,14 @@ strong{color:var(--ivory);font-weight:600}
 .camera-guide{position:absolute;inset:0;pointer-events:none}
 .camera-guide::before{content:"";position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);
   width:56%;height:74%;border:1.5px dashed rgba(90,209,230,.6);border-radius:50%}
+.camera-hints{list-style:none;margin:1rem auto 0;padding:0;display:flex;gap:.5rem;justify-content:center;
+  flex-wrap:wrap;min-height:2rem}
+.camera-hints .hint{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--parchment);border:1px solid var(--line);border-radius:100px;padding:.35rem .8rem}
+.camera-hints .hint.block{color:var(--note);border-color:rgba(217,178,106,.5)}
+.camera-hints .hint.ok{color:var(--accent-bright);border-color:var(--accent-dim);background:rgba(90,209,230,.07)}
+.camera-hints.ready .hint.ok{animation:hint-ready 1.6s var(--ease) infinite}
+@keyframes hint-ready{0%,100%{background:rgba(90,209,230,.07)}50%{background:rgba(90,209,230,.16)}}
 .camera-actions{display:flex;gap:1rem;justify-content:center;margin-top:1.4rem}
 .tips{margin:2.4rem 0 0;padding:1.3rem 1.4rem;list-style:none;background:var(--ink-raised);
   border:1px solid var(--line-soft);border-radius:12px;
@@ -206,6 +216,18 @@ strong{color:var(--ivory);font-weight:600}
 .card p{font-size:.9rem;color:var(--parchment);margin:.4rem 0 0}
 .summary-card ul{margin:.6rem 0 0;padding-left:1.1rem;font-size:.88rem;color:var(--parchment)}
 .summary-card li{margin-bottom:.35rem}
+
+/* progress history */
+.h-spark{display:block;width:100%;height:36px;color:var(--accent);margin:.6rem 0 .4rem}
+.h-list{list-style:none;margin:.4rem 0 0;padding:0}
+.h-list li{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--line-soft)}
+.h-when{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.04em;color:var(--stone)}
+.h-score{font-family:var(--font-mono);font-size:.8rem;font-weight:700;color:var(--ivory)}
+.h-delta{font-size:.66rem;font-weight:400}
+.h-delta.up{color:var(--accent-bright)}
+.h-delta.down{color:var(--note)}
+.h-note{font-size:.74rem;color:var(--stone);margin:.7rem 0 .8rem}
+.h-clear{padding:.5rem .9rem;font-size:.64rem}
 
 .section-label{display:flex;align-items:baseline;gap:.9rem;font-size:clamp(1.3rem,3vw,1.7rem);
   color:var(--ivory);border-bottom:1px solid var(--line);padding-bottom:.8rem;margin:2.6rem 0 1.4rem;scroll-margin-top:5rem}
@@ -273,6 +295,16 @@ strong{color:var(--ivory);font-weight:600}
   .tips{grid-template-columns:1fr}
   .composite-ring{width:96px;height:96px}
   .composite-num{font-size:2rem}
+  .report-head{flex-direction:column;align-items:flex-start}
+  .camera-stage{width:100%;aspect-ratio:3/4;max-height:none}
+  #camera-video{width:100%;height:100%;object-fit:cover}
+}
+@media(max-width:480px){
+  .topnav{gap:.8rem}
+  .hero-actions .btn{flex:1;text-align:center}
+  .feature-grid,.plan-items{grid-template-columns:1fr}
+  .report-actions{width:100%}
+  .report-actions .btn{flex:1;text-align:center}
 }
 @media(prefers-reduced-motion:reduce){
   .view.is-active{animation:none}
@@ -286,7 +318,7 @@ strong{color:var(--ivory);font-weight:600}
     --accent-dim:#9cc;--line:#ccc;--line-soft:#e5e5e5;--note:#b07d1a}
   body{background:#fff;color:#222}
   body::after{display:none}
-  .topbar,.footer,.report-actions,.overlay-toggles,.hairline-hint,.debug-panel,.engine-status{display:none!important}
+  .topbar,.footer,.report-actions,.overlay-toggles,.hairline-hint,.debug-panel,.engine-status,.h-clear,.camera-hints{display:none!important}
   .view{display:none!important}
   #view-report.is-active{display:block!important}
   .report-grid{grid-template-columns:1fr 1fr}

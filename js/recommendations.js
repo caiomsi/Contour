@@ -44,7 +44,7 @@
         return c.skin && c.skin.redness && c.skin.redness.flagged
           ? 'visible redness, which sun exposure both drives and worsens' : false; } },
     { ref: 'redness-triggers', priority: 6, when: function (c) {
-        return c.skin && c.skin.redness && c.skin.redness.index > 0.22
+        return c.skin && c.skin.redness && c.skin.redness.index > 0.12
           ? 'pronounced facial redness that often tracks with flush triggers' : false; } },
 
     // ---- symmetry (habits/posture) ----

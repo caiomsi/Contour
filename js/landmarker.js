@@ -12,15 +12,19 @@
      }
 
    Everything the photo touches stays in the browser — there is no
-   network call that carries image data. (Verify: DevTools → Network.)
+   network call that carries image data, and since the MediaPipe
+   runtime is vendored, the only external requests left are Google
+   Fonts. (Verify: DevTools → Network.)
    ================================================================= */
 
+// Vendored @mediapipe/tasks-vision@0.10.35 (bundle + wasm live in
+// vendor/mediapipe/) — the app has zero runtime CDN dependencies.
 import {
   FaceLandmarker,
   FilesetResolver
-} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs';
+} from '../vendor/mediapipe/vision_bundle.mjs';
 
-var WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
+var WASM = 'vendor/mediapipe/wasm';
 var MODEL = 'models/face_landmarker.task';
 
 var landmarker = null;
@@ -39,13 +43,24 @@ async function build(delegate) {
   });
 }
 
+/* The GPU delegate can construct successfully and still blow up on the
+   first detect() when the WebGL context is unusable (headless, some
+   drivers) — so smoke-test it before trusting it. */
+function smokeDetect(lm) {
+  var c = document.createElement('canvas');
+  c.width = 8; c.height = 8;
+  c.getContext('2d').fillRect(0, 0, 8, 8);
+  lm.detect(c);            // result irrelevant — only that it doesn't throw
+}
+
 async function init() {
   try {
     landmarker = await build('GPU');
+    smokeDetect(landmarker);
     usedDelegate = 'GPU';
   } catch (e) {
-    // Some machines/headless contexts have no WebGL — fall back to CPU wasm.
     landmarker = await build('CPU');
+    smokeDetect(landmarker);
     usedDelegate = 'CPU';
   }
   window.ContourEngine.delegate = usedDelegate;

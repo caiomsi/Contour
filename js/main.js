@@ -11,7 +11,7 @@
 
   var G = window.ContourGeometry, A = window.ContourAnalysis, FS = window.ContourFaceShape,
       SC = window.ContourScoring, SK = window.ContourSkin, GT = window.ContourGates,
-      CT = window.ContourContent, RC = window.ContourRecommendations;
+      CT = window.ContourContent, RC = window.ContourRecommendations, H = window.ContourHistory;
 
   function $(s, r) { return (r || document).querySelector(s); }
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -22,7 +22,7 @@
     work: null,          // { canvas, w, h, imageData }
     result: null,        // MediaPipe result
     m: null, scores: null, skin: null, shape: null, recs: null, gates: null, pose: null,
-    hairlineY: undefined,
+    hairlineY: undefined, hairlineAuto: false, historyId: null,
     overlays: { thirds: true, fifths: false, symmetry: false, canthal: false, shape: false, indices: false },
     drag: false
   };
@@ -64,9 +64,17 @@
   document.querySelectorAll('[data-goto]').forEach(function (b) {
     b.addEventListener('click', function () { var t = b.getAttribute('data-goto'); if (t === 'capture') showPanel('upload'); setView(t); });
   });
-  $('#methodology') && document.querySelectorAll('[data-nav="methodology"]').forEach(function (a) {
+  document.querySelectorAll('[data-nav="methodology"]').forEach(function (a) {
     a.addEventListener('click', function (e) {
-      if (document.body.getAttribute('data-view') !== 'report') { e.preventDefault(); alert('Run an analysis to see the methodology in context.'); }
+      if (document.body.getAttribute('data-view') !== 'report') {
+        e.preventDefault();
+        setView('landing');
+        var strip = $('.ethics-strip');
+        if (strip) { strip.classList.add('flash'); setTimeout(function () { strip.classList.remove('flash'); }, 1800); }
+        if (statusEl && !statusEl.classList.contains('err')) {
+          statusEl.textContent = 'Run an analysis to read the full methodology in your report.';
+        }
+      }
     });
   });
 
@@ -86,14 +94,52 @@
     dropzone.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
   }
 
+  var HEIC_RE = /\.hei[cf]$/i;
+  function isHeicFile(file) {
+    return file.type === 'image/heic' || file.type === 'image/heif' || HEIC_RE.test(file.name || '');
+  }
+
   function handleFile(file) {
-    if (!/^image\//.test(file.type)) { showRetake([{ message: 'That file is not an image. Use a PNG, JPG or WebP photo.' }]); return; }
+    // HEIC often arrives with an empty MIME type outside Safari — accept by extension too.
+    if (!/^image\//.test(file.type) && !isHeicFile(file)) {
+      showRetake([{ message: 'That file is not an image. Use a PNG, JPG, WebP or HEIC photo.' }]); return;
+    }
     setView('analyzing'); setAnalyzing('Reading your photo…');
-    var decode = ('createImageBitmap' in window)
+    decodeFile(file)
+      .then(function (bmp) { toWorkCanvas(bmp); return runPipeline(); })
+      .catch(function (err) { console.error(err); showRetake([{ message: 'Could not read that image. Try another photo.' }]); });
+  }
+
+  function decodeFile(file) {
+    var native = ('createImageBitmap' in window)
       ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return createImageBitmap(file); })
       : loadViaImg(file);
-    decode.then(function (bmp) { toWorkCanvas(bmp); return runPipeline(); })
-      .catch(function (err) { console.error(err); showRetake([{ message: 'Could not read that image. Try another photo.' }]); });
+    if (!isHeicFile(file)) return native;
+    // HEIC: Safari decodes natively; elsewhere fall back to the vendored
+    // on-device wasm decoder (lazy-loaded, same-origin — nothing uploaded).
+    return native.catch(function () {
+      setAnalyzing('Converting iPhone photo (HEIC)…');
+      return loadHeicDecoder().then(function (heic2any) {
+        return heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+      }).then(function (out) {
+        var blob = Array.isArray(out) ? out[0] : out;
+        return ('createImageBitmap' in window) ? createImageBitmap(blob) : loadViaImg(blob);
+      });
+    });
+  }
+
+  var heicLoader = null;
+  function loadHeicDecoder() {
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (heicLoader) return heicLoader;
+    heicLoader = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'vendor/heic2any.min.js';
+      s.onload = function () { window.heic2any ? res(window.heic2any) : rej(new Error('heic2any missing')); };
+      s.onerror = function () { heicLoader = null; rej(new Error('failed to load HEIC decoder')); };
+      document.head.appendChild(s);
+    });
+    return heicLoader;
   }
 
   function loadViaImg(file) {
@@ -103,16 +149,75 @@
     });
   }
 
-  /* ---------------- camera ---------------- */
+  /* ---------------- camera + live guidance ---------------- */
   var stream = null, video = $('#camera-video');
+  var hintTimer = null, frameCv = null;
+
   function startCamera() {
     showPanel('camera');
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showRetake([{ message: 'This browser has no camera access. Use the upload option.' }]); showPanel('upload'); return; }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
-      .then(function (s) { stream = s; if (video) { video.srcObject = s; video.play(); } })
+      .then(function (s) {
+        stream = s;
+        if (video) { video.srcObject = s; video.play(); }
+        whenReady().then(startHintLoop).catch(function () {});
+      })
       .catch(function () { showRetake([{ message: 'Camera permission was denied. You can still upload a photo.' }]); showPanel('upload'); });
   }
-  function stopCamera() { if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; } }
+  function stopCamera() {
+    stopHintLoop();
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+  }
+
+  /* Live pre-capture hints: run the same detector + the same pure
+     quality gates on a video frame ~2.5x/sec and translate the gate
+     ids into short directions. One source of truth for thresholds. */
+  var HINT_TEXT = {
+    'no-face': 'No face in view', 'multi-face': 'Only you in frame',
+    'too-small': 'Come closer', 'off-angle': 'Face the camera straight-on',
+    'off-angle-mild': 'Straighten up a little', 'expression': 'Relax — neutral face',
+    'expression-mild': 'Soften the expression', 'eyes-closed': 'Open both eyes',
+    'too-dark': 'Find more light', 'too-bright': 'Too bright — turn from the light',
+    'lighting': 'Even out the light', 'lens-distortion': 'Hold a bit farther away'
+  };
+  function startHintLoop() {
+    if (hintTimer || !stream) return;
+    if (!frameCv) frameCv = document.createElement('canvas');
+    hintTimer = setInterval(tickHints, 400);
+  }
+  function stopHintLoop() {
+    if (hintTimer) { clearInterval(hintTimer); hintTimer = null; }
+    renderHints(null);
+  }
+  function tickHints() {
+    if (!video || !video.videoWidth || !engineReady) return;
+    frameCv.width = video.videoWidth; frameCv.height = video.videoHeight;
+    var fctx = frameCv.getContext('2d', { willReadFrequently: true });
+    fctx.drawImage(video, 0, 0);
+    try {
+      var result = window.ContourEngine.detect(frameCv);
+      var imageData = fctx.getImageData(0, 0, frameCv.width, frameCv.height);
+      var ev = evaluateGates(result, imageData, frameCv.width, frameCv.height);
+      renderHints(ev.gates);
+    } catch (e) { /* transient frame failure — keep last hint */ }
+  }
+  function renderHints(gates) {
+    var ul = $('#camera-hints'); if (!ul) return;
+    if (!gates) { ul.innerHTML = ''; ul.className = 'camera-hints'; return; }
+    var msgs = [];
+    gates.issues.forEach(function (i) { if (HINT_TEXT[i.id]) msgs.push({ t: HINT_TEXT[i.id], block: i.severity === 'block' }); });
+    gates.advisories.forEach(function (a2) { if (HINT_TEXT[a2.id]) msgs.push({ t: HINT_TEXT[a2.id], block: false }); });
+    if (!msgs.length) {
+      ul.className = 'camera-hints ready';
+      ul.innerHTML = '<li class="hint ok">Looking good — capture when ready</li>';
+      return;
+    }
+    ul.className = 'camera-hints';
+    ul.innerHTML = msgs.slice(0, 2).map(function (m2) {
+      return '<li class="hint' + (m2.block ? ' block' : '') + '">' + m2.t + '</li>';
+    }).join('');
+  }
+
   $('#camera-shoot') && $('#camera-shoot').addEventListener('click', function () {
     if (!video || !video.videoWidth) return;
     setView('analyzing'); setAnalyzing('Capturing…');
@@ -127,43 +232,78 @@
     var scale = Math.min(1, MAXDIM / Math.max(sw, sh));
     var w = Math.round(sw * scale), h = Math.round(sh * scale);
     var c = document.createElement('canvas'); c.width = w; c.height = h;
-    var ctx = c.getContext('2d');
+    var ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(src, 0, 0, w, h);
     state.work = { canvas: c, w: w, h: h, imageData: ctx.getImageData(0, 0, w, h) };
   }
 
   /* ---------------- the pipeline ---------------- */
+  /* Shared by the analysis pipeline and the live camera hints: build a
+     gate context from a detection result and run the pure gate checks. */
+  function evaluateGates(result, imageData, w, h) {
+    var faces = (result && result.faceLandmarks) || [];
+    var raw = faces[0];
+    var ipd = 0, fill = 0, pose = null, blend = {}, exposure = null;
+    if (raw) {
+      var pxTmp = G.toPixels(raw, w, h);
+      ipd = G.dist(pxTmp[A.LM.IRIS_R], pxTmp[A.LM.IRIS_L]);
+      var bb = bbox(pxTmp); fill = (bb.maxX - bb.minX) / w;
+      pose = poseFrom(result, pxTmp);
+      blend = blendMap(result);
+      exposure = imageData ? exposureStats(imageData, bb) : null;
+    }
+    var gctx = { faceCount: faces.length, ipdPx: ipd, faceFillRatio: fill, pose: pose, blend: blend, exposure: exposure };
+    return { gates: GT.check(gctx), pose: pose };
+  }
+
   function runPipeline() {
     state.hairlineY = undefined;
+    state.hairlineAuto = false;
     return whenReady().then(function () {
       setAnalyzing('Detecting facial landmarks…');
       var w = state.work.w, h = state.work.h;
       var result = window.ContourEngine.detect(state.work.canvas);
       state.result = result;
-      var faces = (result && result.faceLandmarks) || [];
+      var ev = evaluateGates(result, state.work.imageData, w, h);
+      state.gates = ev.gates; state.pose = ev.pose;
 
-      // build gate context that works even with 0 faces
-      var raw = faces[0];
-      var ipd = 0, fill = 0, pose = null, blend = {}, exposure = null;
-      if (raw) {
-        var pxTmp = G.toPixels(raw, w, h);
-        ipd = G.dist(pxTmp[A.LM.IRIS_R], pxTmp[A.LM.IRIS_L]);
-        var bb = bbox(pxTmp); fill = (bb.maxX - bb.minX) / w;
-        pose = poseFrom(result, pxTmp);
-        blend = blendMap(result);
-        exposure = exposureStats(state.work.imageData, bb);
-      }
-      var gctx = { faceCount: faces.length, ipdPx: ipd, faceFillRatio: fill, pose: pose, blend: blend, exposure: exposure };
-      var gates = GT.check(gctx);
-      state.gates = gates; state.pose = pose;
-
-      if (!gates.pass) { showRetake(gates.blocks); return; }
+      if (!ev.gates.pass) { showRetake(ev.gates.blocks); return; }
 
       setAnalyzing('Measuring proportions…');
       computeAll();               // measurements → scores → recs (uses state.result)
+      autoHairline();             // pixel-detect the hairline; re-measure if found
+      state.historyId = recordHistory();
       renderReport();
       setView('report');
     });
+  }
+
+  /* Pixel-based hairline estimate. Falls back silently to the heuristic
+     default (and the draggable handle) when no confident transition. */
+  function autoHairline() {
+    if (!state.m || !SK.detectHairlineY) return;
+    var m = state.m, p = m.corrected;
+    var auto = SK.detectHairlineY(state.work.imageData, {
+      midlineX: m.symmetry.midlineX,
+      yStart: p[A.LM.FOREHEAD_TOP].y,
+      faceHeight: m.ref.faceHeight,
+      ipd: m.ref.ipd,
+      // corrected frame -> original image coords (undo the roll correction)
+      mapFn: function (pt) { return G.rotate(pt, m.rollRad, m.rollCenter); }
+    });
+    if (auto !== null) { state.hairlineAuto = true; state.hairlineY = auto; computeAll(); }
+  }
+
+  function recordHistory() {
+    if (!H || typeof localStorage === 'undefined') return null;
+    var feats = {};
+    for (var k in state.scores.features) feats[k] = state.scores.features[k].score;
+    var e = H.push(localStorage, {
+      composite: state.scores.composite,
+      confidence: state.scores.confidence,
+      features: feats
+    });
+    return e ? e.id : null;
   }
 
   // Recompute everything downstream of detection (used on hairline drag too).
@@ -226,9 +366,56 @@
     var num = $('#composite-num'); if (num) num.textContent = state.scores.composite;
     var conf = $('#confidence-badge'); if (conf) conf.textContent = 'Confidence: ' + state.scores.confidence;
 
+    var hint = $('#hairline-hint');
+    if (hint) hint.textContent = state.hairlineAuto
+      ? 'Hairline auto-detected — drag the dashed line if it looks off.'
+      : 'Drag the dashed line to your hairline to refine the thirds.';
+
     renderToggles(); drawAll();
     renderShapeCard(); renderSummary(); renderFeatures(); renderPlan(); renderMethodology();
-    renderDebug();
+    renderHistoryCard(); renderDebug();
+  }
+
+  /* ---- progress history card (numbers only, stored locally) ---- */
+  function renderHistoryCard() {
+    var card = $('#history-card'); if (!card || !H || typeof localStorage === 'undefined') return;
+    var list = H.load(localStorage);
+    if (!list.length) { card.hidden = true; return; }
+    card.hidden = false;
+    var rows = H.withDeltas(list).slice(-6).reverse().map(function (r) {
+      var d = new Date(r.entry.t);
+      var when = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+        ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      var delta = r.delta === null ? '' :
+        ' <span class="h-delta ' + (r.delta >= 0 ? 'up' : 'down') + '">' + (r.delta >= 0 ? '+' : '') + r.delta + '</span>';
+      return '<li><span class="h-when">' + when + '</span><span class="h-score">' + r.entry.composite + delta + '</span></li>';
+    }).join('');
+    card.innerHTML = '<h4>Progress on this device</h4>' +
+      sparkline(list.map(function (e) { return e.composite; })) +
+      '<ul class="h-list">' + rows + '</ul>' +
+      '<p class="h-note">' + list.length + ' ' + (list.length === 1 ? 'analysis' : 'analyses') +
+      ' stored locally — scores only, never photos.</p>' +
+      '<button class="btn btn-ghost h-clear" id="h-clear" type="button">Clear history</button>';
+    var btn = $('#h-clear');
+    if (btn) btn.addEventListener('click', function () {
+      if (btn.dataset.arm) { H.clear(localStorage); state.historyId = null; renderHistoryCard(); return; }
+      btn.dataset.arm = '1'; btn.textContent = 'Tap again to clear';
+      setTimeout(function () {
+        var b = $('#h-clear');
+        if (b && b.dataset.arm) { delete b.dataset.arm; b.textContent = 'Clear history'; }
+      }, 2600);
+    });
+  }
+  function sparkline(vals) {
+    if (vals.length < 2) return '';
+    var w = 220, hgt = 36, pts = [];
+    for (var i = 0; i < vals.length; i++) {
+      var x = (i / (vals.length - 1)) * (w - 4) + 2;
+      var y = hgt - 3 - (vals[i] / 100) * (hgt - 6);
+      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+    return '<svg class="h-spark" viewBox="0 0 ' + w + ' ' + hgt + '" preserveAspectRatio="none" aria-hidden="true">' +
+      '<polyline points="' + pts.join(' ') + '" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
   }
 
   /* ---- overlay toggle chips ---- */
@@ -351,19 +538,45 @@
   (function () {
     var cv = $('#annot-canvas'); if (!cv) return;
     function toCanvasY(e) { var r = cv.getBoundingClientRect(); return (e.clientY - r.top) * (cv.height / r.height); }
+    // Grab zone sized in DISPLAY pixels (~18px) so the handle stays
+    // draggable when the canvas is scaled down on small screens.
+    function grabThreshold() {
+      var r = cv.getBoundingClientRect();
+      return Math.max(14, 18 * (cv.height / Math.max(1, r.height)));
+    }
+    function nearHairline(canvasY) {
+      return state.m && Math.abs(canvasY - state.hairlineY) < grabThreshold();
+    }
     cv.addEventListener('pointerdown', function (e) {
       if (!state.overlays.thirds || !state.m) return;
-      if (Math.abs(toCanvasY(e) - state.hairlineY) < 22) { state.drag = true; cv.setPointerCapture(e.pointerId); }
+      if (nearHairline(toCanvasY(e))) { state.drag = true; cv.setPointerCapture(e.pointerId); }
     });
+    // Block touch-scroll only when the touch starts on the handle.
+    cv.addEventListener('touchstart', function (e) {
+      if (!state.overlays.thirds || !state.m || !e.touches || !e.touches.length) return;
+      var r = cv.getBoundingClientRect();
+      var y = (e.touches[0].clientY - r.top) * (cv.height / r.height);
+      if (nearHairline(y)) e.preventDefault();
+    }, { passive: false });
     cv.addEventListener('pointermove', function (e) {
       if (!state.drag) return;
       state.hairlineY = Math.max(2, Math.min(cv.height - 2, toCanvasY(e)));
+      state.hairlineAuto = false;
       // live recompute thirds/score without re-detecting
       computeAll(); drawAll();
       var num = $('#composite-num'); if (num) num.textContent = state.scores.composite;
       var ring = $('#composite-ring'); if (ring) ring.style.setProperty('--pct', state.scores.composite);
     });
-    cv.addEventListener('pointerup', function () { if (state.drag) { state.drag = false; renderFeatures(); } });
+    cv.addEventListener('pointerup', function () {
+      if (!state.drag) return;
+      state.drag = false; renderFeatures();
+      if (state.historyId && H && typeof localStorage !== 'undefined') {
+        var feats = {};
+        for (var k in state.scores.features) feats[k] = state.scores.features[k].score;
+        H.update(localStorage, state.historyId, { composite: state.scores.composite, features: feats });
+        renderHistoryCard();
+      }
+    });
   })();
 
   /* ---- side cards ---- */
@@ -376,9 +589,15 @@
   function renderSummary() {
     var c = $('#summary-card'); if (!c) return;
     var f = state.scores.features, items = [];
+    var lowest = 100;
+    for (var lk in f) if (f[lk].score < lowest) lowest = f[lk].score;
     var strong = topFeatures(f, true), soft = topFeatures(f, false);
-    if (strong) items.push('Closest to typical ranges: <strong>' + strong + '</strong>.');
-    if (soft) items.push('Furthest from typical: <strong>' + soft + '</strong>.');
+    if (lowest >= 90) {
+      items.push('Everything measured sits within or near the typical ranges.');
+    } else {
+      if (strong) items.push('Closest to typical ranges: <strong>' + strong + '</strong>.');
+      if (soft) items.push('Furthest from typical: <strong>' + soft + '</strong>.');
+    }
     items.push('This is one descriptive lens — see Methodology for what the numbers do and don’t mean.');
     c.innerHTML = '<h4>In short</h4><ul><li>' + items.join('</li><li>') + '</li></ul>';
   }
@@ -391,15 +610,15 @@
   /* ---- feature cards ---- */
   var DEFS = {
     symmetry: { def: 'How closely your left and right sides mirror each other.', fmt: function (v) { return (v * 100).toFixed(1) + '% avg offset'; }, ideal: 'under 5%' },
-    thirds: { def: 'Balance of forehead, midface and lower-face heights.', fmt: function (v) { return (v * 100).toFixed(1) + '% max deviation'; }, ideal: 'under 3%' },
-    fifths: { def: 'Whether the face divides into five even eye-widths across.', fmt: function (v) { return (v * 100).toFixed(1) + '% deviation'; }, ideal: 'under 2.5%' },
-    canthal: { def: 'Tilt of each eye from inner to outer corner.', fmt: function (v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + '°'; }, ideal: '+1° to +8°' },
-    interocular: { def: 'Spacing between the eyes relative to eye width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.90–1.10×' },
-    nose: { def: 'Nose width relative to the inner-eye distance.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.88–1.12×' },
-    mouthNose: { def: 'Mouth width relative to nose width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.40–1.70×' },
+    thirds: { def: 'Balance of forehead, midface and lower-face heights.', fmt: function (v) { return (v * 100).toFixed(1) + '% max deviation'; }, ideal: 'under 3.5%' },
+    fifths: { def: 'Whether the face divides into five even eye-widths across.', fmt: function (v) { return (v * 100).toFixed(1) + '% deviation'; }, ideal: 'under 3%' },
+    canthal: { def: 'Tilt of each eye from inner to outer corner.', fmt: function (v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + '°'; }, ideal: '+1° to +10°' },
+    interocular: { def: 'Spacing between the eyes relative to eye width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.10–1.42×' },
+    nose: { def: 'Nose width relative to the inner-eye distance.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.90–1.25×' },
+    mouthNose: { def: 'Mouth width relative to nose width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.30–1.65×' },
     lips: { def: 'Upper-lip height relative to lower lip.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.45–0.72×' },
     midface: { def: 'Midface height relative to face width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.48–0.60×' },
-    fwhr: { def: 'Facial width-to-height (cheekbones vs upper face).', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.75–2.05× · contested' },
+    fwhr: { def: 'Facial width-to-height (cheekbones vs upper face).', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.75–2.20× · contested' },
     skin: { def: 'Under-eye and redness signals from the photo (lighting-dependent).', fmt: function (v) { return Math.round(v) + '/100'; }, ideal: 'photo-dependent' }
   };
   function tierPhrase(t) { return t === 'typical' ? 'within the typical range' : t === 'slightly' ? 'a little outside the typical range' : 'outside the typical range'; }

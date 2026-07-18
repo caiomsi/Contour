@@ -5,8 +5,8 @@ lifestyle-only action plan. Your photo never leaves your device.
 
 → Live: https://caiomsi.github.io/Contour/
 
-Contour is a QOVES-style facial analysis app built responsibly. Upload a photo (or
-use your camera) and it:
+Contour is a QOVES-style facial analysis app built responsibly. Upload a photo —
+PNG, JPG, WebP or iPhone HEIC — or use your camera (with live framing hints), and it:
 
 1. Detects your facial landmarks **entirely in your browser** with Google's MediaPipe
    Face Landmarker (478 points).
@@ -21,13 +21,21 @@ use your camera) and it:
 
 ## Your photo never leaves your device
 
-There is no server and no upload. The MediaPipe model is bundled with the site and
-loads from the same origin; all detection and math run locally in JavaScript/WASM.
+There is no server and no upload. The MediaPipe runtime, the face model, and the
+HEIC decoder are all bundled with the site and load from the same origin; every
+piece of detection and math runs locally in JavaScript/WASM. The only external
+requests are Google Fonts.
 
 You can verify it: open DevTools → **Network**, run an analysis, and confirm that
-every request is a `GET` (page, styles, scripts, fonts, the MediaPipe library, and
-the local model) and that **no request carries your image**. Nothing is posted
-anywhere.
+every request is a same-origin `GET` (plus fonts) and that **no request carries
+your image**. Nothing is posted anywhere.
+
+## Progress over time
+
+Each successful analysis stores its **scores only** — composite, per-feature
+numbers, confidence, date — in your browser's local storage (never the photo,
+never landmarks). The report shows your recent runs with a sparkline so lifestyle
+changes can actually be tracked across weeks. One button clears it; nothing syncs.
 
 ## Running locally
 
@@ -70,11 +78,18 @@ CI (`.github/workflows/ci.yml`) runs them all on every push and PR.
   shows a confidence level, but a straight-on, neutral, evenly-lit photo at arm's
   length is always most reliable.
 - The scores are built on tunable, literature-informed heuristics (see
-  `js/scoring.js`), not objective truths.
+  `js/scoring.js`), not objective truths. The bands were deliberately **widened
+  against a small, diverse set of reference faces** so ordinary variation scores
+  well — the raw neoclassical "ideals" punished normal eye spacing and nose
+  proportions, and the redness signal is measured against your own
+  forehead/chin baseline so warmer skin tones aren't misread as "redness."
 
 ## Tech
 
 Plain HTML/CSS/vanilla JS, no build step. Face landmarks via
 [`@mediapipe/tasks-vision`](https://www.npmjs.com/package/@mediapipe/tasks-vision)
-`0.10.35` (pinned), model vendored in `models/`. A [Caio·MSI](https://caiomsi.com)
-side project.
+`0.10.35` — runtime + wasm vendored in `vendor/mediapipe/`, model in `models/`,
+so the app has zero runtime CDN dependencies. HEIC decoding via a vendored
+[heic2any](https://github.com/alexcorvi/heic2any) (lazy-loaded only when a HEIC
+file is chosen; Safari decodes natively). A [Caio·MSI](https://caiomsi.com) side
+project.
