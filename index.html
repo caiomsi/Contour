@@ -206,8 +206,26 @@
         <p class="section-intro">Lifestyle-only suggestions, ordered by relevance to what Contour observed. Nothing here is medical or surgical advice.</p>
         <div class="plan" id="plan"></div>
 
+        <!-- opt-in AI deep report — the ONE feature that sends the photo off-device -->
+        <h3 class="section-label"><span class="folio">03</span> AI deep report <span class="dr-tag">optional · leaves your device</span></h3>
+        <div class="deep-report" id="deep-report">
+          <div class="dr-intro" id="dr-intro">
+            <p class="dr-explain">
+              Everything above ran on your device. This extra is different: if you choose,
+              Contour sends <strong>this photo and your measurements</strong> to Contour’s
+              server, which forwards them to Anthropic’s Claude AI to write a personal,
+              lifestyle-only narrative report. The photo is not stored or logged anywhere —
+              and nothing is sent unless you press the button.
+            </p>
+            <button class="btn btn-solid" id="dr-generate" type="button">Generate AI report — sends this photo</button>
+            <p class="dr-fineprint">Free while in beta · a few per day · takes about half a minute.</p>
+          </div>
+          <div class="dr-status" id="dr-status" hidden role="status"></div>
+          <div class="dr-body" id="dr-body" hidden></div>
+        </div>
+
         <!-- methodology -->
-        <h3 class="section-label" id="methodology"><span class="folio">03</span> Methodology &amp; limits</h3>
+        <h3 class="section-label" id="methodology"><span class="folio">04</span> Methodology &amp; limits</h3>
         <div class="accordion" id="methodology-body"></div>
 
         <!-- debug (only with ?debug=1) -->
@@ -243,6 +261,7 @@
   <script src="js/content.js"></script>
   <script src="js/recommendations.js"></script>
   <script src="js/history.js"></script>
+  <script src="js/deepreport.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

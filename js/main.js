@@ -11,7 +11,8 @@
 
   var G = window.ContourGeometry, A = window.ContourAnalysis, FS = window.ContourFaceShape,
       SC = window.ContourScoring, SK = window.ContourSkin, GT = window.ContourGates,
-      CT = window.ContourContent, RC = window.ContourRecommendations, H = window.ContourHistory;
+      CT = window.ContourContent, RC = window.ContourRecommendations, H = window.ContourHistory,
+      DR = window.ContourDeepReport;
 
   function $(s, r) { return (r || document).querySelector(s); }
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -373,8 +374,70 @@
 
     renderToggles(); drawAll();
     renderShapeCard(); renderSummary(); renderFeatures(); renderPlan(); renderMethodology();
-    renderHistoryCard(); renderDebug();
+    renderHistoryCard(); resetDeepReport(); renderDebug();
   }
+
+  /* ---- opt-in AI deep report ----
+     Nothing is sent anywhere until the user presses the button; each
+     new analysis resets the card back to the consent state. */
+  function resetDeepReport() {
+    var intro = $('#dr-intro'), status = $('#dr-status'), body = $('#dr-body'), btn = $('#dr-generate');
+    if (intro) intro.hidden = false;
+    if (btn) btn.disabled = false;
+    if (status) { status.hidden = true; status.textContent = ''; }
+    if (body) { body.hidden = true; body.textContent = ''; }
+  }
+
+  function generateDeepReport() {
+    if (!DR || !state.work || !state.scores) return;
+    var btn = $('#dr-generate'), status = $('#dr-status'), body = $('#dr-body');
+    if (btn) btn.disabled = true;
+    if (status) {
+      status.hidden = false;
+      status.className = 'dr-status working';
+      status.textContent = 'Sending the photo and waiting for the AI — about half a minute…';
+    }
+
+    var payload = {
+      image: state.work.canvas.toDataURL('image/jpeg', 0.85),
+      metrics: DR.buildDeepPayload(state.m, state.scores, state.shape, state.skin)
+    };
+
+    fetch(DR.ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { status: res.status, data: data };
+        });
+      })
+      .then(function (r) {
+        if (r.status === 200 && r.data && r.data.ok) {
+          var clean = DR.sanitizeReport(r.data.report);
+          if (clean) {
+            if (status) { status.hidden = true; }
+            var intro = $('#dr-intro'); if (intro) intro.hidden = true;
+            if (body) { body.hidden = false; DR.renderDeepReport(body, clean); }
+            return;
+          }
+        }
+        if (status) {
+          status.className = 'dr-status error';
+          status.textContent = DR.errorMessage(r.status, r.data);
+        }
+        if (btn) btn.disabled = false;
+      })
+      .catch(function () {
+        if (status) {
+          status.className = 'dr-status error';
+          status.textContent = 'No connection to the report service. Your local report above is unaffected.';
+        }
+        if (btn) btn.disabled = false;
+      });
+  }
+  $('#dr-generate') && $('#dr-generate').addEventListener('click', generateDeepReport);
 
   /* ---- progress history card (numbers only, stored locally) ---- */
   function renderHistoryCard() {

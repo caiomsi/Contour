@@ -16,7 +16,7 @@ var sandbox = { console: console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
 
-var MODULES = ['geometry', 'analysis', 'faceshape', 'scoring', 'skin', 'gates', 'content', 'recommendations', 'history'];
+var MODULES = ['geometry', 'analysis', 'faceshape', 'scoring', 'skin', 'gates', 'content', 'recommendations', 'history', 'deepreport'];
 var loadedOk = true;
 MODULES.forEach(function (name) {
   try {
@@ -30,7 +30,8 @@ MODULES.forEach(function (name) {
 t.ok(loadedOk, 'all pure modules load as browser globals');
 t.ok(sandbox.ContourGeometry && sandbox.ContourAnalysis && sandbox.ContourScoring
   && sandbox.ContourFaceShape && sandbox.ContourSkin && sandbox.ContourGates
-  && sandbox.ContourContent && sandbox.ContourRecommendations && sandbox.ContourHistory,
+  && sandbox.ContourContent && sandbox.ContourRecommendations && sandbox.ContourHistory
+  && sandbox.ContourDeepReport,
   'all namespaces attached to window');
 
 // ---- drive the full pipeline (via the window globals) ----

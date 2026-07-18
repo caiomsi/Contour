@@ -263,6 +263,34 @@ strong{color:var(--ivory);font-weight:600}
   padding-left:.7rem;margin:0 0 .6rem}
 .rec-why{font-size:.8rem;color:var(--stone);margin:0}
 
+/* AI deep report (opt-in, off-device) */
+.dr-tag{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--note);border:1px solid rgba(217,178,106,.45);border-radius:100px;padding:.22rem .6rem;
+  font-weight:400;margin-left:.4rem}
+.deep-report{background:var(--ink-raised);border:1px solid var(--line-soft);border-radius:12px;
+  padding:1.4rem 1.5rem;max-width:820px}
+.dr-explain{font-size:.92rem;color:var(--parchment);margin:0 0 1.2rem;max-width:64ch}
+.dr-fineprint{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.04em;color:var(--stone);margin:.8rem 0 0}
+.dr-status{margin-top:.4rem;font-size:.9rem}
+.dr-status.working{color:var(--accent-bright)}
+.dr-status.working::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);margin-right:.55rem;animation:ping 1.6s var(--ease) infinite}
+.dr-status.error{color:var(--note)}
+.dr-headline{font-family:var(--font-display);font-size:1.3rem;color:var(--ivory);margin:0 0 .6rem}
+.dr-summary{font-size:.95rem;color:var(--parchment);margin:0 0 1.4rem;max-width:66ch}
+.dr-label{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);margin:1.4rem 0 .7rem}
+.dr-obs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.8rem}
+.dr-obs-item{background:var(--ink-surface);border:1px solid var(--line-soft);border-radius:10px;padding:.9rem 1rem}
+.dr-obs-area{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-bright)}
+.dr-obs-note{font-size:.86rem;color:var(--parchment);margin:.4rem 0 0}
+.dr-plan{display:flex;flex-direction:column;gap:.8rem}
+.dr-plan-item{background:var(--ink-surface);border:1px solid var(--line-soft);border-radius:10px;padding:1rem 1.1rem}
+.dr-plan-title{font-family:var(--font-display);font-size:1rem;color:var(--ivory);margin:0 0 .4rem}
+.dr-plan-why{font-size:.82rem;color:var(--accent-bright);border-left:2px solid var(--accent-dim);padding-left:.7rem;margin:0 0 .5rem}
+.dr-plan-how{font-size:.88rem;color:var(--parchment);margin:0}
+.dr-disclaimer{font-size:.78rem;color:var(--stone);margin:1.4rem 0 0;font-style:italic}
+
 /* accordion */
 .accordion details{border:1px solid var(--line-soft);border-radius:10px;background:var(--ink-raised);margin-bottom:.7rem}
 .accordion summary{cursor:pointer;padding:1rem 1.2rem;font-family:var(--font-display);color:var(--ivory);
@@ -318,7 +346,8 @@ strong{color:var(--ivory);font-weight:600}
     --accent-dim:#9cc;--line:#ccc;--line-soft:#e5e5e5;--note:#b07d1a}
   body{background:#fff;color:#222}
   body::after{display:none}
-  .topbar,.footer,.report-actions,.overlay-toggles,.hairline-hint,.debug-panel,.engine-status,.h-clear,.camera-hints{display:none!important}
+  .topbar,.footer,.report-actions,.overlay-toggles,.hairline-hint,.debug-panel,.engine-status,.h-clear,.camera-hints,.dr-intro,.dr-status{display:none!important}
+  .deep-report:not(:has(.dr-body:not([hidden]))){display:none}
   .view{display:none!important}
   #view-report.is-active{display:block!important}
   .report-grid{grid-template-columns:1fr 1fr}

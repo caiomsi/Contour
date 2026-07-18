@@ -25,5 +25,7 @@ jobs:
         run: node test/recommendations.test.js
       - name: History (local progress storage)
         run: node test/history.test.js
+      - name: Deep report (payload + sanitizer)
+        run: node test/deepreport.test.js
       - name: Smoke (full pipeline via browser load path)
         run: node test/smoke.test.js

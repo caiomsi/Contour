@@ -46,6 +46,7 @@ js/gates.js             pure: quality gates + confidence (THRESH table)
 js/content.js           recommendation content pack (data only)
 js/recommendations.js   pure rules engine: findings → prioritized, deduped, capped recs
 js/history.js           pure: local progress history (scores only, injected storage)
+js/deepreport.js        opt-in AI deep report: pure payload builder + response sanitizer + safe renderer
 js/main.js              plain IIFE: capture + live camera hints, gates, overlays, report, debug
 vendor/mediapipe/       vendored tasks-vision runtime (bundle + wasm) — no runtime CDN
 vendor/heic2any.min.js  vendored HEIC decoder, lazy-loaded only for .heic/.heif uploads
@@ -105,13 +106,22 @@ is vendored in `models/` so analysis doesn't depend on Google Storage uptime.
 GitHub Pages can't send COOP/COEP headers, so wasm threads are unavailable — the GPU
 delegate + single-thread wasm is used (fast enough for one still image).
 
-## Privacy (a real, testable guarantee)
+## Privacy (a real, testable guarantee — with ONE explicit exception)
 
-The photo never leaves the browser. Verified in DevTools → Network: every request is
-a GET, the model loads same-origin, and running an analysis triggers **no** request
-carrying image data. Don't add any endpoint that uploads the image; if a
-waitlist/feedback CTA is ever added, it must send only the fields the user typed
-(reuse the MSI-Forms pattern), never the photo.
+The analysis never sends the photo anywhere. Verified in DevTools → Network: every
+request is a GET, the model loads same-origin, and running an analysis triggers
+**no** request carrying image data.
+
+The single exception is the **AI deep report** (`js/deepreport.js` + the
+`#deep-report` card): a POST of the downscaled photo + compact metrics to
+`https://forms.caiomsi.com/api/contour-report` (lives in `../MSI-Forms`), fired
+ONLY by an explicit button press whose label says it sends the photo. Keep that
+consent contract intact: never auto-trigger it, never widen what it sends (the
+payload builder sends rounded numbers only — no landmarks/pixels), and always
+render the AI's text via `textContent` (see `renderDeepReport`). The endpoint
+returns 503 `not-configured` until `ANTHROPIC_API_KEY` is set on the MSI-Forms
+Vercel project, and the card degrades gracefully. Don't add any other endpoint
+that uploads the image.
 
 ## Tests & CI
 

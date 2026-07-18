@@ -19,16 +19,31 @@ PNG, JPG, WebP or iPhone HEIC — or use your camera (with live framing hints), 
 4. Turns the observations into a personalized, **lifestyle-only** plan — sleep, skin
    & sun, hydration, habits & posture, and styling for your face shape.
 
-## Your photo never leaves your device
+## Your photo never leaves your device (with one explicit exception)
 
-There is no server and no upload. The MediaPipe runtime, the face model, and the
-HEIC decoder are all bundled with the site and load from the same origin; every
-piece of detection and math runs locally in JavaScript/WASM. The only external
-requests are Google Fonts.
+The analysis itself has no server and no upload. The MediaPipe runtime, the face
+model, and the HEIC decoder are all bundled with the site and load from the same
+origin; every piece of detection and math runs locally in JavaScript/WASM. The
+only external requests are Google Fonts.
 
 You can verify it: open DevTools → **Network**, run an analysis, and confirm that
 every request is a same-origin `GET` (plus fonts) and that **no request carries
 your image**. Nothing is posted anywhere.
+
+The one exception is the **optional AI deep report** (below): if — and only if —
+you press its clearly-labeled button, that photo and your measurements are sent
+once to Contour's server, which forwards them to Anthropic's Claude API and
+returns the report. The image is not stored or logged anywhere along the way.
+
+## AI deep report (optional)
+
+At the bottom of every report there's an opt-in extra: a personal narrative
+report written by Claude (Anthropic's AI) from your photo and your measurements.
+It follows the same rules as the rest of Contour — lifestyle-only suggestions,
+dysmorphia-safe language, no medical or surgical advice, adults only — enforced
+server-side, with the response validated and rendered as plain text. It's
+rate-limited (a small number of free reports per day) because each one costs
+real money to generate.
 
 ## Progress over time
 
