@@ -424,6 +424,12 @@
     var ring = $('#composite-ring'); if (ring) ring.style.setProperty('--pct', state.scores.composite);
     var num = $('#composite-num'); if (num) num.textContent = state.scores.composite;
     var conf = $('#confidence-badge'); if (conf) conf.textContent = 'Confidence: ' + state.scores.confidence;
+    var rid = $('#rm-id');
+    if (rid) {
+      var now = new Date(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      rid.textContent = 'No. ' + pad(now.getMonth() + 1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) +
+        ' · ' + now.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
 
     var hint = $('#hairline-hint');
     if (hint) hint.textContent = state.hairlineAuto
@@ -585,14 +591,14 @@
 
   function line(ctx, x1, y1, x2, y2, opt) {
     opt = opt || {}; ctx.save();
-    ctx.strokeStyle = opt.color || 'rgba(90,209,230,.9)';
+    ctx.strokeStyle = opt.color || 'rgba(255,98,52,.9)';
     ctx.lineWidth = opt.w || 1.2;
     if (opt.dash) ctx.setLineDash(opt.dash);
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.restore();
   }
   function label(ctx, txt, x, y, align) {
-    ctx.save(); ctx.font = '600 13px "Space Mono", monospace';
-    ctx.fillStyle = 'rgba(147,231,244,.95)'; ctx.textAlign = align || 'left';
+    ctx.save(); ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.fillStyle = 'rgba(255,244,236,.95)'; ctx.textAlign = align || 'left';
     ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4;
     ctx.fillText(txt, x, y); ctx.restore();
   }
@@ -605,52 +611,52 @@
     var names = ['UPPER', 'MIDDLE', 'LOWER'];
     for (var i = 0; i < ys.length; i++) {
       var dash = (i === 0) ? [7, 5] : null;                  // hairline dashed = draggable
-      line(ctx, x0, ys[i], x1, ys[i], { dash: dash, color: i === 0 ? 'rgba(147,231,244,.95)' : 'rgba(90,209,230,.65)' });
+      line(ctx, x0, ys[i], x1, ys[i], { dash: dash, color: i === 0 ? 'rgba(255,244,236,.95)' : 'rgba(255,98,52,.65)' });
     }
     for (var j = 0; j < 3; j++) {
       var pct = Math.round(state.m.thirds[['upper', 'middle', 'lower'][j]] * 100);
       label(ctx, names[j] + ' ' + pct + '%', x1 + 6, (ys[j] + ys[j + 1]) / 2 + 4);
     }
     // hairline handle
-    ctx.save(); ctx.fillStyle = 'rgba(147,231,244,1)';
+    ctx.save(); ctx.fillStyle = 'rgba(255,244,236,1)';
     ctx.beginPath(); ctx.arc(x0, ys[0], 5, 0, 7); ctx.fill(); ctx.restore();
   }
   function drawFifths(ctx, p) {
     var xs = [A.LM.FACE_R, A.LM.EYE_R_OUT, A.LM.EYE_R_IN, A.LM.EYE_L_IN, A.LM.EYE_L_OUT, A.LM.FACE_L]
       .map(function (i) { return p[i].x; }).sort(function (a, b) { return a - b; });
     var yTop = p[A.LM.FOREHEAD_TOP].y, yBot = p[A.LM.MENTON].y, eyeY = p[A.LM.IRIS_R].y;
-    for (var i = 0; i < xs.length; i++) line(ctx, xs[i], yTop, xs[i], yBot, { color: 'rgba(90,209,230,.5)', w: 1 });
+    for (var i = 0; i < xs.length; i++) line(ctx, xs[i], yTop, xs[i], yBot, { color: 'rgba(255,98,52,.5)', w: 1 });
     for (var s = 0; s < 5; s++) label(ctx, Math.round(state.m.fifths.segs[s] * 100) + '%', (xs[s] + xs[s + 1]) / 2, eyeY - 8, 'center');
   }
   function drawSymmetry(ctx, p) {
     var x = state.m.symmetry.midlineX, yTop = p[A.LM.FOREHEAD_TOP].y, yBot = p[A.LM.MENTON].y;
-    line(ctx, x, yTop, x, yBot, { color: 'rgba(147,231,244,.9)', dash: [4, 4] });
+    line(ctx, x, yTop, x, yBot, { color: 'rgba(255,244,236,.9)', dash: [4, 4] });
     label(ctx, 'MIDLINE', x + 6, yTop + 14);
     A.SYMMETRIC_PAIRS.forEach(function (pr) {
       dot(ctx, p[pr[0]]); dot(ctx, p[pr[1]]);
     });
   }
-  function dot(ctx, pt) { if (!pt) return; ctx.save(); ctx.fillStyle = 'rgba(90,209,230,.6)'; ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.6, 0, 7); ctx.fill(); ctx.restore(); }
+  function dot(ctx, pt) { if (!pt) return; ctx.save(); ctx.fillStyle = 'rgba(255,98,52,.6)'; ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.6, 0, 7); ctx.fill(); ctx.restore(); }
   function drawCanthal(ctx, p) {
     seg(ctx, p[A.LM.EYE_R_IN], p[A.LM.EYE_R_OUT], state.m.canthal.right);
     seg(ctx, p[A.LM.EYE_L_IN], p[A.LM.EYE_L_OUT], state.m.canthal.left);
     function seg(ctx, m, l, deg) {
-      line(ctx, m.x, m.y, l.x, l.y, { color: 'rgba(147,231,244,.95)', w: 1.4 });
-      line(ctx, m.x, m.y, l.x, m.y, { color: 'rgba(90,209,230,.4)', w: 1, dash: [3, 3] });
+      line(ctx, m.x, m.y, l.x, l.y, { color: 'rgba(255,244,236,.95)', w: 1.4 });
+      line(ctx, m.x, m.y, l.x, m.y, { color: 'rgba(255,98,52,.4)', w: 1, dash: [3, 3] });
       label(ctx, (deg >= 0 ? '+' : '') + deg.toFixed(1) + '°', l.x + 4, l.y - 4);
     }
   }
   function drawShapeOverlay(ctx, p) {
     var pairs = [[A.LM.FOREHEAD_R, A.LM.FOREHEAD_L], [A.LM.FACE_R, A.LM.FACE_L], [A.LM.JAW_R, A.LM.JAW_L]];
-    pairs.forEach(function (pr) { line(ctx, p[pr[0]].x, p[pr[0]].y, p[pr[1]].x, p[pr[1]].y, { color: 'rgba(90,209,230,.6)', w: 1 }); });
-    line(ctx, (p[A.LM.FACE_R].x + p[A.LM.FACE_L].x) / 2, state.hairlineY, (p[A.LM.FACE_R].x + p[A.LM.FACE_L].x) / 2, p[A.LM.MENTON].y, { color: 'rgba(90,209,230,.5)', w: 1, dash: [5, 4] });
+    pairs.forEach(function (pr) { line(ctx, p[pr[0]].x, p[pr[0]].y, p[pr[1]].x, p[pr[1]].y, { color: 'rgba(255,98,52,.6)', w: 1 }); });
+    line(ctx, (p[A.LM.FACE_R].x + p[A.LM.FACE_L].x) / 2, state.hairlineY, (p[A.LM.FACE_R].x + p[A.LM.FACE_L].x) / 2, p[A.LM.MENTON].y, { color: 'rgba(255,98,52,.5)', w: 1, dash: [5, 4] });
     label(ctx, state.shape.shape.toUpperCase(), p[A.LM.FACE_L].x + 6, p[A.LM.FACE_L].y);
   }
   function drawIndices(ctx, p) {
-    ctx.save(); ctx.font = '8px "Space Mono", monospace';
+    ctx.save(); ctx.font = '8px "IBM Plex Mono", monospace';
     for (var i = 0; i < p.length; i++) {
-      ctx.fillStyle = 'rgba(90,209,230,.5)'; ctx.beginPath(); ctx.arc(p[i].x, p[i].y, 1, 0, 7); ctx.fill();
-      if (i % 2 === 0) { ctx.fillStyle = 'rgba(200,230,235,.5)'; ctx.fillText(i, p[i].x + 2, p[i].y - 2); }
+      ctx.fillStyle = 'rgba(255,98,52,.5)'; ctx.beginPath(); ctx.arc(p[i].x, p[i].y, 1, 0, 7); ctx.fill();
+      if (i % 2 === 0) { ctx.fillStyle = 'rgba(255,240,230,.5)'; ctx.fillText(i, p[i].x + 2, p[i].y - 2); }
     }
     ctx.restore();
   }
@@ -808,7 +814,7 @@
     wrap.appendChild(lead);
 
     // 2) questions: texture + length up front, the rest tucked away
-    var qs = el('div', 'questions' + (hp.needsTexture ? ' ask' : ''));
+    var qs = el('div', 'questions' + (hp.needsTexture ? ' needs-answer' : ''));
     if (hp.needsTexture) qs.appendChild(el('p', 'q-title', 'What’s your hair like? Pick one to see 3 cuts chosen for you.'));
     qs.appendChild(chipGroup('hairTexture', { big: hp.needsTexture, label: 'Hair type' }));
     qs.appendChild(chipGroup('lengthPref', { label: 'Length you want' }));

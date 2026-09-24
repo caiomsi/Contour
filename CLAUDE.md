@@ -35,7 +35,7 @@ is plain `<script>` (window globals), per workspace convention.
 
 ```
 index.html              single page, view state-machine: landing → capture → analyzing → report
-css/style.css           clinical-dark tokens (cyan accent), + @media print
+css/style.css           "consultation report" paper tokens (vermilion accent), + @media print
 js/landmarker.js        ONLY ES module — MediaPipe glue → window.ContourEngine
 js/geometry.js          pure: vec math, roll-correction, yaw frontalization, Euler-from-matrix (COLUMN-major)
 js/analysis.js          pure: landmarks → measurements (LM index map lives here)
@@ -109,6 +109,18 @@ tones, more hair types) is the most valuable next calibration step.
 runs the same pure gates, and maps gate ids to short directions (HINT_TEXT).
 **HEIC uploads**: Safari decodes natively; elsewhere `decodeFile` lazy-loads
 `vendor/heic2any.min.js` and converts on-device.
+
+## Design (v1.5): the consultation report
+
+Warm off-white paper (`--paper #f3eee4`, `--sheet`, `--sunk`), ink text (`--ink`,
+`--text`, `--muted`), **reddish-orange accent** — `--accent #c8431a` for fills/marks/
+buttons (white text 4.9:1) and `--accent-ink #a3360f` for accent-coloured TEXT on
+paper (5.8:1); never put small text in `--accent`. Newsreader serif for headings,
+Inter body, IBM Plex Mono for report metadata/data labels. Sections are numbered
+with a 2px ink rule above; the report opens with a "Consultation report · No." strip
+(`#rm-id`). Photo overlays on the canvas use vivid vermilion `rgba(255,98,52,…)`
+with warm-white labels. Don't reuse the class name `.ask` (it's the "Ask for" quote
+box) — the question card's modifier is `.needs-answer`.
 
 ## Report layout & advice (v1.4)
 
