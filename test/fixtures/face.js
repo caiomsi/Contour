@@ -84,6 +84,27 @@ function rotated(p, deg) {
   });
 }
 
+/* Give a (flat) face plausible depth: sides curve back, nose juts
+   forward. MediaPipe z is negative toward the camera, same scale as x.
+   Mirrored pairs get equal depth, so a frontal face reads yaw 0. */
+var NOSE = { 1: 1, 2: 1, 48: 1, 278: 1, 187: 1, 411: 1, 168: 1, 6: 1 };
+function withDepth(p) {
+  return p.map(function (q, i) {
+    var dx = q.x - 0.5;
+    return { x: q.x, y: q.y, z: 1.5 * dx * dx - 0.05 - (NOSE[i] ? 0.05 : 0) };
+  });
+}
+
+/* Turn the head by deg about the vertical axis through x=0.5, z=0
+   (orthographic projection, like the landmark model's x/y). */
+function yawed(p, deg) {
+  var a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  return p.map(function (q) {
+    var dx = q.x - 0.5, dz = q.z || 0;
+    return { x: 0.5 + dx * c - dz * s, y: q.y, z: dx * s + dz * c };
+  });
+}
+
 /* Build an ImageData-shaped object filled with a base skin tone, with
    optional darker under-eye patches and redder cheeks for skin tests. */
 function makeImage(w, h, opts) {
@@ -104,4 +125,4 @@ function makeImage(w, h, opts) {
   return { data: data, width: w, height: h, fillRect: fillRect };
 }
 
-module.exports = { N: N, balancedFace: balancedFace, clone: clone, rotated: rotated, makeImage: makeImage };
+module.exports = { N: N, balancedFace: balancedFace, clone: clone, rotated: rotated, withDepth: withDepth, yawed: yawed, makeImage: makeImage };

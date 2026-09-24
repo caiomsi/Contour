@@ -59,4 +59,32 @@ turn[1].x = 0.44;                         // nose tip off-center (turned)
 var mt = A.analyze(turn, W, H);
 t.ok(Math.abs(mt.pose.yawRatio) > 0.1, 'off-center nose -> yaw proxy nonzero');
 
+// ---- yaw frontalization: a turned head measures like a frontal one ----
+var deep = F.withDepth(F.balancedFace());
+var mFront = A.analyze(deep, W, H, { hairlineY: 100 });
+t.near(mFront.ref.yawDeg, 0, 0.3, 'frontal deep face -> yaw ~0');
+t.near(mFront.symmetry.asymNorm, 0, 0.01, 'frontal deep face symmetric');
+[-6, 6].forEach(function (deg) {
+  var turned = F.yawed(deep, deg);
+  var raw = A.analyze(turned, W, H, { hairlineY: 100, frontalize: false });
+  var fix = A.analyze(turned, W, H, { hairlineY: 100 });
+  t.near(Math.abs(fix.ref.yawDeg), 6, 0.5, deg + 'deg turn -> yaw read ~6 (got ' + fix.ref.yawDeg.toFixed(2) + ')');
+  t.ok(fix.ref.frontalized, deg + 'deg turn -> frontalized');
+  t.ok(raw.symmetry.asymNorm > 0.03, deg + 'deg turn skews raw symmetry (' + raw.symmetry.asymNorm.toFixed(3) + ')');
+  t.near(fix.symmetry.asymNorm, mFront.symmetry.asymNorm, 0.01, deg + 'deg turn -> symmetry restored (' + fix.symmetry.asymNorm.toFixed(3) + ')');
+  t.near(fix.fifths.rmsDev, mFront.fifths.rmsDev, 0.005, deg + 'deg turn -> fifths restored');
+  t.near(fix.interocular.ratio, mFront.interocular.ratio, 0.02, deg + 'deg turn -> eye ratio restored');
+});
+// beyond the correction limit it leaves the points alone
+var wild = A.analyze(F.yawed(deep, 30), W, H);
+t.ok(!wild.ref.frontalized, '30deg turn -> not extrapolated');
+
+// ---- jaw angle: squarer jaw corner -> smaller angle ----
+var sq = F.clone(F.balancedFace());
+sq[172] = { x: 0.31, y: 0.80 }; sq[397] = { x: 0.69, y: 0.80 };
+var ja = A.analyze(F.balancedFace(), W, H).shapeInput.jawAngle;
+var jsq = A.analyze(sq, W, H).shapeInput.jawAngle;
+t.ok(ja > 90 && ja < 180, 'jaw angle plausible (' + ja.toFixed(1) + ')');
+t.ok(jsq < ja - 5, 'squarer jaw corner -> smaller angle (' + jsq.toFixed(1) + ' < ' + ja.toFixed(1) + ')');
+
 t.done();

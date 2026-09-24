@@ -77,4 +77,26 @@ t.ok(groups.length > 0 && groups[0].items.length > 0, 'groupByCategory returns n
 var totalGrouped = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
 t.eq(totalGrouped, lAll.length, 'grouping preserves all items');
 
+// ---- no profile: generic shape styling + a nudge to share hair type ----
+var np = R.generate(ctx({ faceShape: { shape: 'round' } }));
+t.ok(has(np, 'grooming-round'), 'no profile -> generic face-shape styling kept');
+t.ok(has(np, 'profile-nudge'), 'no profile -> nudge to add hair type');
+t.ok(!has(np, 'hair-cut'), 'no profile -> no texture-specific cut');
+
+// ---- with a hair profile: texture-aware recs replace the generic one ----
+var wp = R.generate(ctx({ faceShape: { shape: 'round', secondary: 'oval', leaning: false },
+  profile: { hairTexture: 'curly', hairThickness: 'fine', lengthPref: 'long', facialHair: 'full', glasses: 'yes', skinType: 'dry' } }));
+t.ok(has(wp, 'hair-cut') && has(wp, 'hair-care'), 'profile -> cut + care recs');
+t.ok(!has(wp, 'grooming-round'), 'profile texture -> generic shape rec replaced');
+t.ok(!has(wp, 'profile-nudge'), 'profile texture -> no nudge');
+t.ok(has(wp, 'beard') && has(wp, 'eyewear') && has(wp, 'skin-type'), 'beard, eyewear, skin-type recs present');
+t.eq(get(wp, 'hair-cut').categoryLabel, 'Hair & Care', 'hair recs grouped under Hair & Care');
+t.ok(get(wp, 'hair-cut').because.length > 10, 'profile recs carry a because');
+
+// ---- findings still win space when everything fires ----
+var busy = R.generate(Object.assign(cAll, { profile: { hairTexture: 'coily', facialHair: 'full', glasses: 'yes', skinType: 'oily', hairConcern: 'thinning' } }));
+t.ok(busy.length <= R.CAP, 'busy plan still capped at ' + R.CAP);
+t.ok(has(busy, 'underEye-sleep') && has(busy, 'redness-skincare'), 'skin findings survive a full hair profile');
+t.ok(has(busy, 'hair-cut'), 'cut rec survives a busy plan');
+
 t.done();

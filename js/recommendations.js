@@ -6,7 +6,7 @@
    that triggered it. Pure module.
 
    Rule = { ref (content id), priority, when(ctx) -> false | becauseString }
-   ctx  = { measurements, scores, skin, faceShape }
+   ctx  = { measurements, scores, skin, faceShape, profile?, hairlineKnown? }
    ================================================================= */
 
 (function (root) {
@@ -15,8 +15,11 @@
   var C = (typeof require !== 'undefined')
     ? require('./content.js')
     : root.ContourContent;
+  var S = (typeof require !== 'undefined')
+    ? require('./styling.js')
+    : root.ContourStyling;
 
-  var CAP = 10;         // never show more than this
+  var CAP = 12;         // never show more than this
   var TARGET_MIN = 6;   // top up with baselines below this
 
   function featScore(ctx, key) {
@@ -98,8 +101,15 @@
       if (res) pushItem(C.CONTENT[r.ref], r.priority, res);
     }
 
-    // 2) face-shape grooming (always, if we have a shape)
-    if (ctx.faceShape && ctx.faceShape.shape) {
+    // 2) hair-type-aware styling from the (optional) profile
+    var profile = ctx.profile || {};
+    var hasProfile = Object.keys(profile).length > 0;
+    var styled = S ? S.recsFor(ctx) : [];
+    for (var si = 0; si < styled.length; si++) pushItem(styled[si], styled[si].priority, styled[si].because);
+
+    // 3) generic face-shape grooming — only when we don't know the hair
+    //    texture (the cut rec above replaces it when we do)
+    if (!profile.hairTexture && ctx.faceShape && ctx.faceShape.shape) {
       var styling = C.FACE_SHAPE_STYLING[ctx.faceShape.shape];
       if (styling) {
         pushItem({
@@ -110,15 +120,18 @@
         }, 6, 'your face reads closest to a ' + ctx.faceShape.shape + ' shape');
       }
     }
+    if (!profile.hairTexture) {
+      pushItem(C.CONTENT['profile-nudge'], hasProfile ? 5 : 5.5, null);
+    }
 
-    // 3) top up with baselines to TARGET_MIN, and always ensure SPF + sleep
+    // 4) top up with baselines to TARGET_MIN, and always ensure SPF + sleep
     var ensure = ['base-spf', 'base-sleep'];
     for (var e = 0; e < ensure.length; e++) pushItem(C.CONTENT[ensure[e]], 3);
     for (var b = 0; b < C.BASELINE_IDS.length && out.length < TARGET_MIN; b++) {
       pushItem(C.CONTENT[C.BASELINE_IDS[b]], 2);
     }
 
-    // 4) sort by priority (desc), then category for stable grouping; cap
+    // 5) sort by priority (desc), then category for stable grouping; cap
     out.sort(function (a, b2) {
       if (b2.priority !== a.priority) return b2.priority - a.priority;
       return a.category < b2.category ? -1 : a.category > b2.category ? 1 : 0;

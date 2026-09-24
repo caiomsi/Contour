@@ -19,10 +19,16 @@ jobs:
         run: node test/scoring.test.js
       - name: Face shape (classification)
         run: node test/faceshape.test.js
-      - name: Skin signals (pixel sampling)
+      - name: Skin signals + hairline (pixel sampling)
         run: node test/skin.test.js
+      - name: Burst aggregation (camera multi-frame)
+        run: node test/landmarks-agg.test.js
+      - name: Styling (hair-type-aware plan + ethics lint)
+        run: node test/styling.test.js
       - name: Recommendations (rules, dedupe, cap)
         run: node test/recommendations.test.js
+      - name: Profile (local hair/skin answers)
+        run: node test/profile.test.js
       - name: History (local progress storage)
         run: node test/history.test.js
       - name: Deep report (payload + sanitizer)

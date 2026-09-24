@@ -16,7 +16,7 @@ var sandbox = { console: console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
 
-var MODULES = ['geometry', 'analysis', 'faceshape', 'scoring', 'skin', 'gates', 'content', 'recommendations', 'history', 'deepreport'];
+var MODULES = ['geometry', 'analysis', 'faceshape', 'scoring', 'skin', 'gates', 'content', 'styling', 'recommendations', 'history', 'profile', 'landmarks-agg', 'deepreport'];
 var loadedOk = true;
 MODULES.forEach(function (name) {
   try {
@@ -31,11 +31,12 @@ t.ok(loadedOk, 'all pure modules load as browser globals');
 t.ok(sandbox.ContourGeometry && sandbox.ContourAnalysis && sandbox.ContourScoring
   && sandbox.ContourFaceShape && sandbox.ContourSkin && sandbox.ContourGates
   && sandbox.ContourContent && sandbox.ContourRecommendations && sandbox.ContourHistory
-  && sandbox.ContourDeepReport,
+  && sandbox.ContourDeepReport && sandbox.ContourStyling && sandbox.ContourProfile
+  && sandbox.ContourLandmarksAgg,
   'all namespaces attached to window');
 
 // ---- drive the full pipeline (via the window globals) ----
-var errors = 0, out = null;
+var errors = 0, out = null, outP = null;
 try {
   var A = sandbox.ContourAnalysis, S = sandbox.ContourScoring, FSh = sandbox.ContourFaceShape,
       SK = sandbox.ContourSkin, REC = sandbox.ContourRecommendations;
@@ -46,12 +47,15 @@ try {
   var skin = SK.compute(img, m.pxOriginal);           // real skin sampling
   var sc = S.score(m, skin, 'high');
   out = REC.generate({ measurements: m, scores: sc, skin: skin, faceShape: shape });
+  outP = REC.generate({ measurements: m, scores: sc, skin: skin, faceShape: shape,
+    profile: sandbox.ContourProfile.validate({ hairTexture: 'wavy', lengthPref: 'medium', glasses: 'yes' }) });
 } catch (e) {
   errors++;
   console.error('  ✗ pipeline threw: ' + e.message + '\n' + e.stack);
 }
 t.eq(errors, 0, 'end-to-end pipeline runs without throwing');
-t.ok(out && out.length >= 1 && out.length <= 10, 'produced 1..10 recommendations');
+t.ok(out && out.length >= 1 && out.length <= 12, 'produced 1..12 recommendations');
+t.ok(outP && outP.some(function (r) { return r.id === 'hair-cut'; }), 'profile flows through to a hair-cut rec (browser path)');
 if (out) {
   var wellFormed = out.every(function (r) { return r.title && r.body && r.categoryLabel; });
   t.ok(wellFormed, 'every recommendation is well-formed (title/body/category)');
@@ -84,5 +88,12 @@ var mild = GT.check(Object.assign({}, goodCtx, {
 t.ok(mild.pass, 'mild smile still passes');
 t.ok(mild.confidence !== 'high', 'mild smile lowers confidence');
 t.ok(mild.advisories.length >= 1, 'large face -> selfie-distortion advisory');
+
+// ---- gates: camera burst steadiness ----
+var steady = GT.check(Object.assign({}, goodCtx, { burst: { frames: 6, spread: 0.01 } }));
+t.eq(steady.confidence, 'high', 'steady burst keeps high confidence');
+var shaky = GT.check(Object.assign({}, goodCtx, { burst: { frames: 6, spread: 0.06 } }));
+t.ok(shaky.pass && shaky.warns.some(function (w) { return w.id === 'unsteady'; }), 'shaky burst -> unsteady warning');
+t.ok(shaky.confidence !== 'high', 'shaky burst lowers confidence');
 
 t.done();

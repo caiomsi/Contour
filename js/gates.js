@@ -11,7 +11,8 @@
      faceFillRatio,                  // faceWidthPx / imageWidth (0..1)
      pose: { yaw, pitch },           // degrees (matrix Euler or proxy)
      blend: { jawOpen, mouthSmileLeft, ... },  // blendshape name->score
-     exposure: { mean, clipLow, clipHigh }     // face-region, 0..255 / 0..1
+     exposure: { mean, clipLow, clipHigh },    // face-region, 0..255 / 0..1
+     burst: { frames, spread }                 // optional: camera multi-frame capture
    }
    ================================================================= */
 
@@ -29,7 +30,8 @@
     EXP_DARK_BLOCK: 40, EXP_DARK_WARN: 55,
     EXP_BRIGHT_BLOCK: 225, EXP_BRIGHT_WARN: 210,
     CLIP_WARN: 0.22,
-    SELFIE_FILL: 0.72        // face fills > this frac of width => advisory
+    SELFIE_FILL: 0.72,       // face fills > this frac of width => advisory
+    JITTER_WARN: 0.03        // camera burst: landmark spread (IPD units) beyond => warn
   };
 
   function g(blend, k) { return (blend && typeof blend[k] === 'number') ? blend[k] : 0; }
@@ -97,7 +99,13 @@
       }
     }
 
-    // 6) selfie-distortion advisory (never blocks)
+    // 6) camera burst steadiness (only present for multi-frame captures)
+    if (ctx.burst && ctx.burst.frames > 1 && ctx.burst.spread > THRESH.JITTER_WARN) {
+      issues.push({ id: 'unsteady', severity: 'warn',
+        message: 'You or the camera moved during capture — holding still for a second gives a steadier read.' });
+    }
+
+    // 7) selfie-distortion advisory (never blocks)
     if (ctx.faceFillRatio && ctx.faceFillRatio > THRESH.SELFIE_FILL) {
       advisories.push({ id: 'lens-distortion',
         message: 'Close-up front-camera shots exaggerate nose and forehead size. For the most accurate proportions, use arm’s length or the rear camera.' });

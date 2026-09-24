@@ -37,15 +37,18 @@ is plain `<script>` (window globals), per workspace convention.
 index.html              single page, view state-machine: landing → capture → analyzing → report
 css/style.css           clinical-dark tokens (cyan accent), + @media print
 js/landmarker.js        ONLY ES module — MediaPipe glue → window.ContourEngine
-js/geometry.js          pure: vec math, roll-correction, Euler-from-matrix (COLUMN-major)
+js/geometry.js          pure: vec math, roll-correction, yaw frontalization, Euler-from-matrix (COLUMN-major)
 js/analysis.js          pure: landmarks → measurements (LM index map lives here)
-js/faceshape.js         pure: measurements → oval/round/square/heart/diamond/oblong
+js/faceshape.js         pure: soft prototype classifier (population z-scores) → shape + secondary + probs
 js/scoring.js           pure: BANDS + WEIGHTS tables → 0–100 + composite
 js/skin.js              pure: pixel sampling → under-eye/redness signals + detectHairlineY
 js/gates.js             pure: quality gates + confidence (THRESH table)
 js/content.js           recommendation content pack (data only)
-js/recommendations.js   pure rules engine: findings → prioritized, deduped, capped recs
+js/styling.js           hair-type-aware pack: cuts (shape goal × texture × length), care, beard, eyewear, skin type, fringe
+js/recommendations.js   pure rules engine: findings (+ optional profile) → prioritized, deduped, capped recs
 js/history.js           pure: local progress history (scores only, injected storage)
+js/profile.js           pure: "Tailor your plan" answers (hair texture etc.), localStorage only, injected storage
+js/landmarks-agg.js     pure: camera burst → medoid + similarity-align + per-landmark median
 js/deepreport.js        opt-in AI deep report: pure payload builder + response sanitizer + safe renderer
 js/main.js              plain IIFE: capture + live camera hints, gates, overlays, report, debug
 vendor/mediapipe/       vendored tasks-vision runtime (bundle + wasm) — no runtime CDN
@@ -61,21 +64,67 @@ path) to prove that wiring.
 
 ## Pipeline (main.js runPipeline)
 
-`ContourEngine.detect(canvas)` → **gates** (face count, size, pose, expression,
-exposure; shared with the live camera hints via `evaluateGates`) → if blocked, show
-retake and stop → else `analysis.analyze` (roll-corrected, IPD-normalized) →
-**auto-hairline** (`skin.detectHairlineY` walks up the midline for a dark-hair
-transition; null → heuristic default) → `skin.compute` → `scoring.score` →
-`faceshape.classify` → `recommendations.generate` → render + **record history**
+`ContourEngine.detect(canvas)` (or, for camera captures, the burst aggregate — see
+below) → **gates** (face count, size, pose, expression, exposure, burst steadiness;
+shared with the live camera hints via `evaluateGates`) → if blocked, show retake and
+stop → else `analysis.analyze` (roll-corrected, **yaw-frontalized**, IPD-normalized)
+→ **auto-hairline** (`skin.detectHairlineY`, two passes — see below; null →
+heuristic default) → `skin.compute` → `scoring.score` → `faceshape.classify` →
+`recommendations.generate` (with the local profile) → render + **record history**
 (`history.js`, localStorage, scores only — never photos/landmarks). The annotated
 canvas is drawn roll-corrected; overlays use `measurements.corrected` coordinates.
 The hairline handle stays draggable and live-recomputes thirds (and patches the
 history entry on release).
 
+**Accuracy layer (v1.3):**
+- **Yaw frontalization** (`geometry.estimateYawRad`/`unYawAll`, used in `analyze`):
+  head yaw is read from the landmarks' OWN depth (mirrored pairs sit at equal z on a
+  frontal face), then points are rotated back to frontal before measuring. It doesn't
+  depend on the transform-matrix sign convention. Only applied for 0.25°–20°. On 58
+  real portraits this cut median asymmetry from 0.118 to 0.042 (the old number put
+  nearly everyone outside the symmetry band just from a 3–6° turn).
+- **Face shape** is a softmax over distances to 6 prototypes in z-space against
+  `faceshape.POP` (calibration set). The v1.2 fixed cut-offs assumed width ratios
+  near 1.0; real MediaPipe ratios are ~0.83/0.82, so every real face came out
+  diamond/oblong. Jaw-corner angle (`shapeInput.jawAngle`) separates square from
+  round. `hairlineKnown: false` (heuristic hairline) down-weights the length term.
+- **Hairline**: pass 1 = sustained darker-than-forehead run (best for dark/brown hair
+  on any skin tone); pass 2 (only if 1 finds nothing or is rejected) = sharp local
+  step in a colour+chroma+texture difference score (finds white/grey/blonde hair).
+  Both reject an edge whose above-region matches the backdrop beside the head (bald
+  scalp top). Tunables in `skin.HAIR`. Known limit: some bald heads against busy or
+  gradient backdrops still read the scalp top — the draggable handle covers it.
+- **Camera burst**: Capture takes ~6 frames (~0.7s), keeps gate-passing ones, and
+  `landmarks-agg.aggregate` aligns them (similarity fit on stable anchors) to the
+  medoid frame and takes per-landmark medians; pixels come from the medoid frame.
+  `burst.spread` > `gates.THRESH.JITTER_WARN` adds an "unsteady" warning.
+
+**Calibration set (v1.3):** 58 public-domain US Congress official portraits
+(Wikimedia Commons), processed locally through the real pipeline in headless Chrome
+— kept OUT of the repo. It skews middle-aged; widening it (younger faces, more skin
+tones, more hair types) is the most valuable next calibration step.
+
 **Camera** runs a live-hint loop pre-capture: ~2.5×/s it detects on a video frame,
 runs the same pure gates, and maps gate ids to short directions (HINT_TEXT).
 **HEIC uploads**: Safari decodes natively; elsewhere `decodeFile` lazy-loads
 `vendor/heic2any.min.js` and converts on-device.
+
+## Hair-type-aware plan (v1.3)
+
+Hair texture can't be read from one frontal photo, so the report has a **"Tailor
+your plan"** card (`#tailor`, `renderTailor` in main.js): chip groups for hair
+texture, strand thickness, length preference, facial hair, skin type, glasses, hair
+concern (`profile.FIELDS`). Answers live only in localStorage
+(`contour.profile.v1`), are validated to known values, and are **never** added to
+the deep-report payload. A change re-runs only `recommendations.generate` +
+`renderPlan`. With a texture set, `styling.recsFor` replaces the generic
+`grooming-<shape>` rec with: cut (shape goal × texture × length, folding in the
+secondary shape when "leaning"), care (texture + thickness), fringe (driven by the
+MEASURED upper third — skipped when the hairline is only the heuristic guess), beard,
+eyewear, skin-type routine, and lifestyle-only thinning advice. Without a profile a
+`profile-nudge` rec points at the card. Length preference — not gender — selects
+cuts. `test/styling.test.js` covers every shape × texture × length and runs an
+**ethics lint** over all copy (no flaw/surgery/filler/drug names/mewing claims).
 
 ## Scoring & tuning
 
@@ -125,6 +174,7 @@ that uploads the image.
 
 ## Tests & CI
 
-`node test/analysis.test.js` (and scoring/faceshape/skin/recommendations/smoke).
+`node test/analysis.test.js` (and scoring/faceshape/skin/styling/recommendations/
+profile/landmarks-agg/history/deepreport/smoke) — or `for f in test/*.test.js; do node $f; done`.
 Zero dependencies, each prints `PASS`/`FAIL` and exits non-zero on failure.
 `.github/workflows/ci.yml` runs them all on push to `master` + PRs.

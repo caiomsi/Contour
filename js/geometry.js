@@ -95,6 +95,40 @@
     return { x: sx / n, y: sy / n };
   }
 
+  /* ---- yaw frontalization ----
+     A small head turn compresses one side of the face in the 2D image,
+     which inflates symmetry/fifths deviations. MediaPipe gives each
+     landmark a depth (z, same scale as x), and on a frontal face
+     mirrored left/right pairs sit at equal depth. So the head's yaw is
+     the mean angle of the pair vectors in the x–z plane — read from the
+     landmarks themselves, with no dependence on the transform-matrix
+     sign convention. Returns radians (0 when there is no depth). */
+  function estimateYawRad(pts, pairs) {
+    var sum = 0, n = 0;
+    for (var i = 0; i < pairs.length; i++) {
+      var a = pts[pairs[i][0]], b = pts[pairs[i][1]];
+      if (!a || !b) continue;
+      var dx = b.x - a.x, dz = (b.z || 0) - (a.z || 0);
+      if (Math.abs(dx) < 1e-6) continue;
+      // orientation-agnostic: measure along +x regardless of which side
+      sum += Math.atan2(dx > 0 ? dz : -dz, Math.abs(dx)); n++;
+    }
+    return n ? sum / n : 0;
+  }
+
+  /* Rotate every point about the vertical (y) axis through center so
+     the estimated yaw becomes zero (orthographic re-projection). */
+  function unYawAll(pts, yawRad, center) {
+    var c = Math.cos(yawRad), s = Math.sin(yawRad);
+    var cz = center.z || 0;
+    var out = new Array(pts.length);
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], dx = p.x - center.x, dz = (p.z || 0) - cz;
+      out[i] = { x: center.x + dx * c + dz * s, y: p.y, z: cz - dx * s + dz * c, v: p.v };
+    }
+    return out;
+  }
+
   /* Reflect a point across the vertical line x = axisX. */
   function reflectX(p, axisX) {
     return { x: 2 * axisX - p.x, y: p.y, z: p.z || 0 };
@@ -141,7 +175,8 @@
     dist: dist, dist3: dist3, angleDeg: angleDeg,
     rotate: rotate, rotateAll: rotateAll, rollAngleRad: rollAngleRad,
     toPixels: toPixels, centroid: centroid, reflectX: reflectX,
-    eulerFromMatrix: eulerFromMatrix
+    eulerFromMatrix: eulerFromMatrix,
+    estimateYawRad: estimateYawRad, unYawAll: unYawAll
   };
 
   root.ContourGeometry = api;

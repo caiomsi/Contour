@@ -80,9 +80,33 @@ var lowBand = F.makeImage(200, 300, { base: { r: 205, g: 172, b: 152 } });
 [30, 100, 170].forEach(function (cx) { lowBand.fillRect(cx, 59, 60, { r: 55, g: 45, b: 40 }); });
 t.eq(SK.detectHairlineY(lowBand, hairOpts), null, 'transition at start -> null');
 
-// too-dark forehead (can't reference) -> null
+// uniformly dark image (no transition to find) -> null
 var darkFace = F.makeImage(200, 300, { base: { r: 30, g: 28, b: 26 } });
-t.eq(SK.detectHairlineY(darkFace, hairOpts), null, 'unreadably dark forehead -> null');
+t.eq(SK.detectHairlineY(darkFace, hairOpts), null, 'uniform dark image -> null');
+
+// hair that is NOT darker than the skin (v1.3 edge pass) and dark-on-dark
+function band(base, hair) {
+  var im = F.makeImage(200, 300, { base: base });
+  [30, 100, 170].forEach(function (cx) { im.fillRect(cx, 30, 50, hair); });
+  return im;
+}
+[
+  ['white hair on light skin', { r: 214, g: 178, b: 158 }, { r: 236, g: 236, b: 232 }],
+  ['grey hair on medium skin', { r: 176, g: 128, b: 100 }, { r: 150, g: 150, b: 150 }],
+  ['blonde hair on light skin', { r: 222, g: 186, b: 168 }, { r: 214, g: 184, b: 118 }],
+  ['black hair on dark skin', { r: 104, g: 68, b: 50 }, { r: 26, g: 24, b: 24 }]
+].forEach(function (c) {
+  var y = SK.detectHairlineY(band(c[1], c[2]), hairOpts);
+  t.ok(y !== null && Math.abs(y - 80) <= 6, c[0] + ' -> detected near the edge (got ' + y + ')');
+});
+
+// bald scalp against a backdrop: the "edge" is the top of the head, and
+// the region above matches the background beside the head -> null
+var bald = F.makeImage(400, 300, { base: { r: 205, g: 172, b: 152 } });
+for (var bx = 0; bx < 400; bx += 50) bald.fillRect(bx, 30, 50, { r: 88, g: 128, b: 178 });
+var baldOpts = { midlineX: 200, yStart: 120, faceHeight: 200, ipd: 60 };
+t.ok(SK.detectHairlineY(bald, baldOpts) !== null, 'without faceWidth the scalp edge still reads as an edge');
+t.eq(SK.detectHairlineY(bald, Object.assign({ faceWidth: 160 }, baldOpts)), null, 'bald scalp vs backdrop -> null');
 
 // mapFn is honored (shift sampling; identity face shifted by +30px in x)
 var shifted = F.makeImage(260, 300, { base: { r: 205, g: 172, b: 152 } });

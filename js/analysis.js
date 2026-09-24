@@ -58,6 +58,18 @@
     [150, 379], [93, 323], [127, 356]
   ];
 
+  /* Outer mirror pairs used to read head yaw from landmark depth. */
+  var YAW_PAIRS = [[234, 454], [127, 356], [93, 323], [33, 263], [133, 362], [116, 345], [61, 291]];
+  var MAX_YAW_CORRECT = 20;   // deg — beyond this the gates block anyway; don't extrapolate
+
+  /* Interior angle (degrees) at vertex b of the path a–b–c. */
+  function angleAt(a, b, c) {
+    var v1x = a.x - b.x, v1y = a.y - b.y, v2x = c.x - b.x, v2y = c.y - b.y;
+    var d = Math.sqrt(v1x * v1x + v1y * v1y) * Math.sqrt(v2x * v2x + v2y * v2y) || 1e-6;
+    var cos = (v1x * v2x + v1y * v2y) / d;
+    return Math.acos(cos < -1 ? -1 : cos > 1 ? 1 : cos) * G.DEG;
+  }
+
   function rms(arr) {
     if (!arr.length) return 0;
     var s = 0;
@@ -112,6 +124,20 @@
     var rollRad = G.rollAngleRad(loEye, hiEye);
     var center = G.centroid(px, [LM.IRIS_R, LM.IRIS_L, LM.MENTON, LM.FOREHEAD_TOP]);
     var p = G.rotateAll(px, -rollRad, center);
+    var poseRaw = headPoseProxy(p);        // pose as photographed (before un-yaw)
+
+    // Yaw frontalization: undo a small head turn using landmark depth so
+    // left/right comparisons aren't skewed by the camera angle.
+    var yawRad = 0, frontalized = false;
+    if (opts.frontalize !== false) {
+      yawRad = G.estimateYawRad(p, YAW_PAIRS);
+      if (Math.abs(yawRad * G.DEG) > 0.25 && Math.abs(yawRad * G.DEG) <= MAX_YAW_CORRECT) {
+        var yc = G.centroid(p, [LM.FACE_R, LM.FACE_L, LM.EYE_R_OUT, LM.EYE_L_OUT]);
+        yc.z = (p[LM.FACE_R].z + p[LM.FACE_L].z) / 2 || 0;
+        p = G.unYawAll(p, yawRad, yc);
+        frontalized = true;
+      }
+    }
 
     // Reference lengths
     var ipd = G.dist(p[LM.IRIS_R], p[LM.IRIS_L]) || 1e-6;
@@ -194,9 +220,16 @@
     var cheekW = faceWidth;
     var jawW = G.dist(p[LM.JAW_R], p[LM.JAW_L]);
     var faceLen = Math.abs(mentonY - hairlineY);
+    // Jaw angle at the jaw corner, between the face side above it and
+    // the chin below: smaller = squarer jaw, larger = softer/tapered.
+    var jawAngle = (angleAt(p[LM.FACE_R], p[LM.JAW_R], p[LM.MENTON]) +
+                    angleAt(p[LM.FACE_L], p[LM.JAW_L], p[LM.MENTON])) / 2;
 
     return {
-      ref: { ipd: ipd, faceWidth: faceWidth, faceHeight: faceHeight, rollDeg: rollRad * G.DEG },
+      ref: {
+        ipd: ipd, faceWidth: faceWidth, faceHeight: faceHeight, rollDeg: rollRad * G.DEG,
+        yawDeg: yawRad * G.DEG, frontalized: frontalized
+      },
       thirds: t,
       fifths: { segs: segs, rmsDev: fifthsDev },
       symmetry: { asymNorm: asymNorm, midlineX: midlineX },
@@ -208,9 +241,10 @@
       midface: { height: midfaceH, ratio: midfaceRatio },
       shapeInput: {
         foreheadW: foreheadW, cheekW: cheekW, jawW: jawW, faceLen: faceLen,
-        lenToWidth: faceLen / (cheekW || 1e-6)
+        lenToWidth: faceLen / (cheekW || 1e-6), jawAngle: jawAngle,
+        hairlineKnown: !!opts.hairlineKnown
       },
-      pose: headPoseProxy(p),
+      pose: poseRaw,
       // for the overlay renderer:
       corrected: p,
       pxOriginal: px,            // un-rotated pixels — skin.js samples on these
@@ -221,7 +255,7 @@
   }
 
   var api = {
-    LM: LM, MIDLINE_IDX: MIDLINE_IDX, SYMMETRIC_PAIRS: SYMMETRIC_PAIRS,
+    LM: LM, MIDLINE_IDX: MIDLINE_IDX, SYMMETRIC_PAIRS: SYMMETRIC_PAIRS, YAW_PAIRS: YAW_PAIRS, angleAt: angleAt,
     canthalTilt: canthalTilt, headPoseProxy: headPoseProxy, analyze: analyze, rms: rms
   };
   root.ContourAnalysis = api;

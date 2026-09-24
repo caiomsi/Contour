@@ -15,6 +15,7 @@
     skin: 'Skin & Sun',
     nutrition: 'Hydration & Nutrition',
     habits: 'Habits & Posture',
+    hair: 'Hair & Care',
     grooming: 'Grooming & Styling'
   };
 
@@ -78,13 +79,19 @@
       id: 'lowerface-body', category: 'habits',
       title: 'Support definition through overall health',
       body: 'If sharper lower-face definition is a personal goal, it follows overall body composition, hydration, and lower evening sodium — not jaw exercises or “mewing”, which do not reshape bone. Prioritize sleep, steady hydration, and regular movement.',
-      why: 'Soft-tissue fullness responds to genuine lifestyle levers; nothing non-surgical restructures the jawbone.'
+      why: 'Soft-tissue fullness responds to genuine lifestyle levers; no exercise, device or product restructures the jawbone.'
     },
     'brow-styling': {
       id: 'brow-styling', category: 'grooming',
       title: 'Let brow shape frame your eyes',
       body: 'A well-kept brow shape is the fastest way to adjust how your eyes read — spacing, tilt, and openness. A one-off professional shape you then maintain is a good starting point.',
       why: 'Brows frame the eyes and can visually balance eye spacing and tilt without changing anything permanent.'
+    },
+    'profile-nudge': {
+      id: 'profile-nudge', category: 'hair',
+      title: 'Get cut and care advice for your hair type',
+      body: 'Tell Contour your hair texture (and optionally facial hair, skin type and glasses) in “Tailor your plan” above. You’ll get cuts matched to both your face shape and your texture, plus a care routine. Your answers stay on this device.',
+      why: 'A single photo can’t reliably show whether hair is straight, wavy, curly or coily, and that changes which cuts and routines work.'
     },
     // ---- baseline universals (always safe to show) ----
     'base-spf': {

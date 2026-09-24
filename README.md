@@ -17,7 +17,8 @@ PNG, JPG, WebP or iPhone HEIC — or use your camera (with live framing hints), 
 3. Scores each against common reference ranges and blends them into a single
    "harmony" composite (one lens, **not** a verdict).
 4. Turns the observations into a personalized, **lifestyle-only** plan — sleep, skin
-   & sun, hydration, habits & posture, and styling for your face shape.
+   & sun, hydration, habits & posture, and hair & styling matched to your face shape
+   *and* your hair type.
 
 ## Your photo never leaves your device (with one explicit exception)
 
@@ -44,6 +45,33 @@ dysmorphia-safe language, no medical or surgical advice, adults only — enforce
 server-side, with the response validated and rendered as plain text. It's
 rate-limited (a small number of free reports per day) because each one costs
 real money to generate.
+
+## Tailored to your hair type
+
+A single front-facing photo can't tell straight hair from coily, so Contour asks.
+The optional **Tailor your plan** card on the report takes a few taps — hair
+texture, strand thickness, the length you like, facial hair, skin type, glasses —
+and the plan updates instantly with:
+
+- cuts that balance your face shape **and** work with your texture, at the length
+  you prefer (chosen by length, not gender),
+- a care routine for your texture and thickness,
+- fringe advice driven by your *measured* forehead proportion,
+- beard shapes, glasses frames and a skin-type routine when relevant.
+
+Your answers are saved only in your browser and never uploaded (not even with the
+AI report). "Forget my answers" deletes them.
+
+## Accuracy
+
+- **Head-turn correction:** a slight turn of the head used to read as asymmetry.
+  Contour now estimates the turn from the landmark model's depth and corrects for it
+  before measuring.
+- **Face shape** is compared with the spread of real measured faces and reported as
+  a closest match, or "oval, leaning round" when you sit between two shapes.
+- **Hairline detection** handles white, grey, blonde and red hair as well as dark
+  hair on any skin tone, and backs off on bald or shaved heads.
+- **Camera captures** combine a short burst of frames to cancel landmark jitter.
 
 ## Progress over time
 
@@ -75,6 +103,11 @@ node test/scoring.test.js
 node test/faceshape.test.js
 node test/skin.test.js
 node test/recommendations.test.js
+node test/styling.test.js
+node test/profile.test.js
+node test/landmarks-agg.test.js
+node test/history.test.js
+node test/deepreport.test.js
 node test/smoke.test.js
 ```
 

@@ -12,7 +12,7 @@
   var G = window.ContourGeometry, A = window.ContourAnalysis, FS = window.ContourFaceShape,
       SC = window.ContourScoring, SK = window.ContourSkin, GT = window.ContourGates,
       CT = window.ContourContent, RC = window.ContourRecommendations, H = window.ContourHistory,
-      DR = window.ContourDeepReport;
+      DR = window.ContourDeepReport, PR = window.ContourProfile, AG = window.ContourLandmarksAgg;
 
   function $(s, r) { return (r || document).querySelector(s); }
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -23,10 +23,17 @@
     work: null,          // { canvas, w, h, imageData }
     result: null,        // MediaPipe result
     m: null, scores: null, skin: null, shape: null, recs: null, gates: null, pose: null,
-    hairlineY: undefined, hairlineAuto: false, historyId: null,
+    hairlineY: undefined, hairlineAuto: false, hairlineDragged: false, historyId: null,
+    burst: null,         // { frames, spread } for camera multi-frame captures
+    profile: loadProfile(),
     overlays: { thirds: true, fifths: false, symmetry: false, canthal: false, shape: false, indices: false },
     drag: false
   };
+
+  /* "Tailor your plan" answers — local only (see profile.js). */
+  function loadProfile() {
+    try { return PR && typeof localStorage !== 'undefined' ? PR.load(localStorage) : {}; } catch (e) { return {}; }
+  }
 
   /* ---------------- view router ---------------- */
   function setView(name) {
@@ -219,11 +226,48 @@
     }).join('');
   }
 
+  /* Capture: a short burst of frames (≈0.7s), keep the ones that pass
+     the gates, align + median their landmarks (landmarks-agg.js) and
+     analyse the aggregate on the most central frame's pixels. Falls
+     back to a single frame if fewer than two frames are usable. */
+  var BURST_N = 6, BURST_GAP = 120;
   $('#camera-shoot') && $('#camera-shoot').addEventListener('click', function () {
     if (!video || !video.videoWidth) return;
-    setView('analyzing'); setAnalyzing('Capturing…');
-    toWorkCanvas(video); stopCamera(); runPipeline().catch(function (e) { console.error(e); showRetake([{ message: 'Something went wrong. Try again.' }]); });
+    setView('analyzing'); setAnalyzing('Hold still — capturing…');
+    stopHintLoop();
+    whenReady().then(captureBurst).then(function (pre) {
+      stopCamera();
+      return runPipeline(pre);
+    }).catch(function (e) { stopCamera(); console.error(e); showRetake([{ message: 'Something went wrong. Try again.' }]); });
   });
+  function captureBurst() {
+    var shots = [], budget = BURST_N + 3;   // a few extra tries for rejected frames
+    return new Promise(function (res) {
+      (function next() {
+        if (!video || !video.videoWidth) return res(null);
+        toWorkCanvas(video);
+        var work = state.work;
+        try {
+          var r = window.ContourEngine.detect(work.canvas);
+          var ev = evaluateGates(r, work.imageData, work.w, work.h);
+          if (ev.gates.pass) shots.push({ work: work, result: r });
+        } catch (e) { /* transient frame failure — skip */ }
+        if (shots.length >= BURST_N || --budget <= 0) return res(combine(shots));
+        setTimeout(next, BURST_GAP);
+      })();
+    });
+  }
+  function combine(shots) {
+    if (!shots.length) return null;      // nothing usable: runPipeline re-detects & shows the retake reason
+    if (shots.length < 2 || !AG) { state.work = shots[shots.length - 1].work; return { result: shots[shots.length - 1].result, burst: null }; }
+    var w = shots[0].work.w, h = shots[0].work.h;
+    var agg = AG.aggregate(shots.map(function (s2) { return s2.result.faceLandmarks[0]; }), w, h);
+    var ref = shots[agg.refIndex];
+    state.work = ref.work;
+    // keep the reference frame's matrix/blendshapes; swap in the aggregate landmarks
+    var result = Object.assign({}, ref.result, { faceLandmarks: [agg.landmarks] });
+    return { result: result, burst: { frames: agg.frames, spread: agg.spread } };
+  }
   $('#camera-cancel') && $('#camera-cancel').addEventListener('click', function () { stopCamera(); showPanel('upload'); });
 
   /* ---------------- source -> working canvas (resized) ---------------- */
@@ -241,7 +285,7 @@
   /* ---------------- the pipeline ---------------- */
   /* Shared by the analysis pipeline and the live camera hints: build a
      gate context from a detection result and run the pure gate checks. */
-  function evaluateGates(result, imageData, w, h) {
+  function evaluateGates(result, imageData, w, h, burst) {
     var faces = (result && result.faceLandmarks) || [];
     var raw = faces[0];
     var ipd = 0, fill = 0, pose = null, blend = {}, exposure = null;
@@ -253,19 +297,22 @@
       blend = blendMap(result);
       exposure = imageData ? exposureStats(imageData, bb) : null;
     }
-    var gctx = { faceCount: faces.length, ipdPx: ipd, faceFillRatio: fill, pose: pose, blend: blend, exposure: exposure };
+    var gctx = { faceCount: faces.length, ipdPx: ipd, faceFillRatio: fill, pose: pose, blend: blend, exposure: exposure, burst: burst || null };
     return { gates: GT.check(gctx), pose: pose };
   }
 
-  function runPipeline() {
+  /* pre (optional) = { result, burst } from a camera burst — skips re-detection. */
+  function runPipeline(pre) {
     state.hairlineY = undefined;
     state.hairlineAuto = false;
+    state.hairlineDragged = false;
+    state.burst = pre && pre.burst ? pre.burst : null;
     return whenReady().then(function () {
       setAnalyzing('Detecting facial landmarks…');
       var w = state.work.w, h = state.work.h;
-      var result = window.ContourEngine.detect(state.work.canvas);
+      var result = pre && pre.result ? pre.result : window.ContourEngine.detect(state.work.canvas);
       state.result = result;
-      var ev = evaluateGates(result, state.work.imageData, w, h);
+      var ev = evaluateGates(result, state.work.imageData, w, h, state.burst);
       state.gates = ev.gates; state.pose = ev.pose;
 
       if (!ev.gates.pass) { showRetake(ev.gates.blocks); return; }
@@ -289,6 +336,7 @@
       yStart: p[A.LM.FOREHEAD_TOP].y,
       faceHeight: m.ref.faceHeight,
       ipd: m.ref.ipd,
+      faceWidth: m.ref.faceWidth,       // enables the bald-scalp/backdrop check
       // corrected frame -> original image coords (undo the roll correction)
       mapFn: function (pt) { return G.rotate(pt, m.rollRad, m.rollCenter); }
     });
@@ -311,12 +359,19 @@
   function computeAll() {
     var raw = state.result.faceLandmarks[0];
     var w = state.work.w, h = state.work.h;
-    state.m = A.analyze(raw, w, h, { hairlineY: state.hairlineY });
+    var known = state.hairlineAuto || state.hairlineDragged;
+    state.m = A.analyze(raw, w, h, { hairlineY: state.hairlineY, hairlineKnown: known });
     if (state.hairlineY === undefined) state.hairlineY = state.m.hairlineY;
     state.skin = SK.compute(state.work.imageData, state.m.pxOriginal);
     state.scores = SC.score(state.m, state.skin, state.gates.confidence);
     state.shape = FS.classify(state.m.shapeInput);
-    state.recs = RC.generate({ measurements: state.m, scores: state.scores, skin: state.skin, faceShape: state.shape });
+    generateRecs();
+  }
+  function generateRecs() {
+    state.recs = RC.generate({
+      measurements: state.m, scores: state.scores, skin: state.skin, faceShape: state.shape,
+      profile: state.profile, hairlineKnown: state.hairlineAuto || state.hairlineDragged
+    });
   }
 
   /* ---------------- gate helpers ---------------- */
@@ -373,7 +428,7 @@
       : 'Drag the dashed line to your hairline to refine the thirds.';
 
     renderToggles(); drawAll();
-    renderShapeCard(); renderSummary(); renderFeatures(); renderPlan(); renderMethodology();
+    renderShapeCard(); renderSummary(); renderFeatures(); renderTailor(); renderPlan(); renderMethodology();
     renderHistoryCard(); resetDeepReport(); renderDebug();
   }
 
@@ -625,6 +680,7 @@
       if (!state.drag) return;
       state.hairlineY = Math.max(2, Math.min(cv.height - 2, toCanvasY(e)));
       state.hairlineAuto = false;
+      state.hairlineDragged = true;
       // live recompute thirds/score without re-detecting
       computeAll(); drawAll();
       var num = $('#composite-num'); if (num) num.textContent = state.scores.composite;
@@ -632,7 +688,7 @@
     });
     cv.addEventListener('pointerup', function () {
       if (!state.drag) return;
-      state.drag = false; renderFeatures();
+      state.drag = false; renderFeatures(); renderShapeCard(); renderPlan();
       if (state.historyId && H && typeof localStorage !== 'undefined') {
         var feats = {};
         for (var k in state.scores.features) feats[k] = state.scores.features[k].score;
@@ -645,9 +701,14 @@
   /* ---- side cards ---- */
   function renderShapeCard() {
     var c = $('#shape-card'); if (!c) return;
-    c.innerHTML = '<h4>Face shape</h4><p><span class="shape-name">' + state.shape.shape + '</span>' +
-      '<span class="shape-conf">~' + Math.round(state.shape.confidence * 100) + '% match</span></p>' +
-      '<p>' + state.shape.note + '</p>';
+    var sh = state.shape;
+    // shape categories are fuzzy — describe the match, don't print a spurious %
+    var strength = sh.leaning ? 'between two shapes' : sh.confidence >= 0.5 ? 'clear match' : 'closest match';
+    c.innerHTML = '<h4>Face shape</h4><p><span class="shape-name">' + sh.shape + '</span>' +
+      (sh.leaning ? '<span class="shape-lean">leaning ' + sh.secondary + '</span>' : '') +
+      '<span class="shape-conf">' + strength + '</span></p>' +
+      '<p>' + sh.note + '</p>' +
+      (!(state.hairlineAuto || state.hairlineDragged) ? '<p class="shape-caveat">Hairline estimated — drag it on the photo for a surer read.</p>' : '');
   }
   function renderSummary() {
     var c = $('#summary-card'); if (!c) return;
@@ -703,6 +764,66 @@
     });
   }
 
+  /* ---- "Tailor your plan" (hair type & co.) ----
+     Chip groups with radio semantics; tapping the selected chip clears
+     it. Every change saves locally and regenerates only the plan. */
+  function renderTailor() {
+    var wrap = $('#tailor'); if (!wrap || !PR) return;
+    var p = state.profile || {};
+    wrap.innerHTML = '';
+    var det = el('details', 'tailor-box');
+    if (PR.isEmpty(p)) det.open = true;
+    var sum = el('summary', 'tailor-summary');
+    var sumTitle = el('span', 'tailor-title'); sumTitle.textContent = 'Tailor your plan';
+    var sumSub = el('span', 'tailor-sub');
+    sumSub.textContent = PR.isEmpty(p) ? 'Add your hair type for cut & care advice · stays on this device' : PR.summary(p) || 'Answers saved on this device';
+    sum.appendChild(sumTitle); sum.appendChild(sumSub); det.appendChild(sum);
+
+    var body = el('div', 'tailor-body');
+    PR.ORDER.forEach(function (field) {
+      var f = PR.FIELDS[field];
+      var grp = el('div', 'tailor-group');
+      grp.setAttribute('role', 'group');
+      var lab = el('p', 'tailor-label'); lab.textContent = f.label; lab.id = 'tl-' + field;
+      grp.setAttribute('aria-labelledby', lab.id);
+      grp.appendChild(lab);
+      var chips = el('div', 'chips');
+      f.options.forEach(function (opt) {
+        var b = el('button', 'chip');
+        b.type = 'button';
+        b.textContent = opt[1];
+        if (opt[2]) b.title = opt[2];
+        var on = p[field] === opt[0];
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (on) b.classList.add('on');
+        b.addEventListener('click', function () {
+          var next = Object.assign({}, state.profile);
+          if (next[field] === opt[0]) delete next[field]; else next[field] = opt[0];
+          setProfile(next, field);
+        });
+        chips.appendChild(b);
+      });
+      grp.appendChild(chips); body.appendChild(grp);
+    });
+    var foot = el('div', 'tailor-foot');
+    var note = el('p', 'tailor-note'); note.textContent = 'Saved only in this browser — never uploaded, not even with the AI report.';
+    foot.appendChild(note);
+    if (!PR.isEmpty(p)) {
+      var forget = el('button', 'link-btn'); forget.type = 'button'; forget.textContent = 'Forget my answers';
+      forget.addEventListener('click', function () { setProfile({}, null, true); });
+      foot.appendChild(forget);
+    }
+    body.appendChild(foot); det.appendChild(body); wrap.appendChild(det);
+  }
+  function setProfile(next, focusField, forget) {
+    if (forget) { try { PR.clear(localStorage); } catch (e) {} state.profile = {}; }
+    else { try { state.profile = PR.save(localStorage, next); } catch (e) { state.profile = PR.validate(next); } }
+    generateRecs(); renderPlan(); renderTailor();
+    var det = $('#tailor .tailor-box'); if (det) det.open = true;
+    // keep keyboard focus on the group the user was working in
+    if (focusField) { var g = document.querySelector('[aria-labelledby="tl-' + focusField + '"] .chip.on, [aria-labelledby="tl-' + focusField + '"] .chip'); if (g) g.focus(); }
+  }
+
   /* ---- plan ---- */
   function renderPlan() {
     var wrap = $('#plan'); if (!wrap) return; wrap.innerHTML = '';
@@ -736,6 +857,10 @@
         '<p>Contour is for adults, for self-care and curiosity. It does not diagnose anything, and every recommendation is a general lifestyle habit. For skin, sleep, or health concerns, talk to a qualified professional.</p>') +
       acc('What affects accuracy',
         '<p>Camera angle, lens distance (close selfies enlarge the nose and forehead), lighting, expression, hair, and glasses all shift the numbers. Contour gates the worst cases and shows a confidence level, but a straight-on, neutral, evenly-lit photo at arm’s length is always most reliable.</p>') +
+      acc('Your hair & skin answers',
+        '<p>Hair texture can’t be read reliably from a single front-facing photo, so Contour asks. Your answers in “Tailor your plan” are saved only in this browser, are never sent anywhere (including the optional AI report), and are used only to choose which cut, care and grooming suggestions to show. “Forget my answers” deletes them.</p>') +
+      acc('How accuracy is protected',
+        '<p>Small head turns are corrected with the landmark model’s depth estimate before measuring, so a slightly angled photo doesn’t read as asymmetry. Camera captures combine several frames to cancel jitter. Face shape is compared against the spread of real measured faces and shown as a closest match, or as “leaning” when you sit between two shapes.</p>') +
       acc('What each measurement means', '<dl>' + defs + '</dl>');
   }
   function acc(title, body) { return '<details><summary>' + title + '</summary><div class="acc-body">' + body + '</div></details>'; }
@@ -744,7 +869,11 @@
   function renderDebug() {
     var panel = $('#debug-panel'); if (!panel) return; panel.hidden = !DEBUG; if (!DEBUG) return;
     var dump = { delegate: window.ContourEngine && window.ContourEngine.delegate, pose: state.pose, gates: state.gates,
-      faceFill: state.m && state.m.pxOriginal ? 'ok' : '-', skin: state.skin, composite: state.scores.composite };
+      faceFill: state.m && state.m.pxOriginal ? 'ok' : '-', skin: state.skin, composite: state.scores.composite,
+      yawDeg: state.m && state.m.ref.yawDeg, frontalized: state.m && state.m.ref.frontalized,
+      burst: state.burst, hairline: { y: state.hairlineY, auto: state.hairlineAuto, dragged: state.hairlineDragged },
+      shape: state.shape && { shape: state.shape.shape, secondary: state.shape.secondary, leaning: state.shape.leaning, probs: state.shape.probs, z: state.shape.z },
+      profile: state.profile };
     var pre = $('#debug-dump'); if (pre) pre.textContent = JSON.stringify(dump, null, 2);
     var exp = $('#dbg-export');
     if (exp) exp.onclick = function () {

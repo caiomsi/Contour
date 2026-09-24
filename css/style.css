@@ -291,6 +291,34 @@ strong{color:var(--ivory);font-weight:600}
 .dr-plan-how{font-size:.88rem;color:var(--parchment);margin:0}
 .dr-disclaimer{font-size:.78rem;color:var(--stone);margin:1.4rem 0 0;font-style:italic}
 
+/* face-shape extras */
+.shape-card .shape-lean{font-family:var(--font-mono);font-size:.72rem;color:var(--accent);margin-left:.6rem}
+.shape-card .shape-caveat{font-size:.78rem;color:var(--stone)}
+
+/* tailor your plan (hair type & co.) */
+.tailor{margin:0 0 1.2rem}
+.tailor-box{background:var(--ink-raised);border:1px solid var(--accent-dim);border-radius:12px}
+.tailor-summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:.35rem .8rem;
+  padding:1rem 1.2rem}
+.tailor-summary::-webkit-details-marker{display:none}
+.tailor-summary::after{content:"+";margin-left:auto;color:var(--accent);font-family:var(--font-mono)}
+.tailor-box[open] .tailor-summary::after{content:"–"}
+.tailor-title{font-family:var(--font-display);color:var(--ivory);font-size:1rem}
+.tailor-sub{font-size:.82rem;color:var(--stone);min-width:0}
+.tailor-body{padding:0 1.2rem 1.1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem 1.6rem}
+.tailor-label{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--parchment);margin:0 0 .45rem}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.chip{font:inherit;font-size:.82rem;color:var(--parchment);background:var(--ink-surface);border:1px solid var(--line);
+  border-radius:100px;padding:.42rem .8rem;min-height:36px;cursor:pointer;transition:border-color .15s,background .15s,color .15s}
+.chip:hover{border-color:var(--accent-dim);color:var(--ivory)}
+.chip.on{background:var(--accent-dim);border-color:var(--accent);color:var(--ivory)}
+.tailor-foot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem;
+  border-top:1px solid var(--line-soft);padding-top:.8rem}
+.tailor-note{font-size:.78rem;color:var(--stone);margin:0}
+.link-btn{font:inherit;font-size:.8rem;color:var(--accent-bright);background:none;border:0;padding:.3rem 0;cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px}
+@media (prefers-reduced-motion:reduce){.chip{transition:none}}
+
 /* accordion */
 .accordion details{border:1px solid var(--line-soft);border-radius:10px;background:var(--ink-raised);margin-bottom:.7rem}
 .accordion summary{cursor:pointer;padding:1rem 1.2rem;font-family:var(--font-display);color:var(--ivory);
@@ -352,6 +380,7 @@ strong{color:var(--ivory);font-weight:600}
   #view-report.is-active{display:block!important}
   .report-grid{grid-template-columns:1fr 1fr}
   .feature,.rec,.card{break-inside:avoid}
+  .tailor{display:none}
   .accordion details{border-color:#ccc}
   .accordion details:not([open]) .acc-body{display:none}
   a{color:#0a7d8c}
