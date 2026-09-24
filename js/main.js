@@ -95,12 +95,25 @@
 
   /* ---------------- upload ---------------- */
   var dropzone = $('#dropzone');
-  if (fileInput) fileInput.addEventListener('change', function () { if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]); });
+  if (fileInput) fileInput.addEventListener('change', function () {
+    var f = fileInput.files && fileInput.files[0];
+    // Reset so choosing the SAME photo again (e.g. after a retake) still fires 'change'.
+    fileInput.value = '';
+    if (f) handleFile(f);
+  });
   if (dropzone) {
     ['dragenter', 'dragover'].forEach(function (ev) { dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add('drag'); }); });
     ['dragleave', 'drop'].forEach(function (ev) { dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.remove('drag'); }); });
     dropzone.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
   }
+  // A photo dropped just outside the zone would otherwise open in the tab and leave the app.
+  ['dragover', 'drop'].forEach(function (ev) {
+    window.addEventListener(ev, function (e) {
+      if (!e.dataTransfer || (dropzone && dropzone.contains(e.target))) return;
+      e.preventDefault();
+      if (ev === 'drop' && document.body.getAttribute('data-view') === 'capture' && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+  });
 
   var HEIC_RE = /\.hei[cf]$/i;
   function isHeicFile(file) {
@@ -114,8 +127,40 @@
     }
     setView('analyzing'); setAnalyzing('Reading your photo…');
     decodeFile(file)
-      .then(function (bmp) { toWorkCanvas(bmp); return runPipeline(); })
-      .catch(function (err) { console.error(err); showRetake([{ message: 'Could not read that image. Try another photo.' }]); });
+      .catch(function (err) { err.stage = 'decode'; throw err; })
+      .then(function (bmp) {
+        toWorkCanvas(bmp);
+        return waitForEngine().then(function () { return runPipeline(); });
+      })
+      .catch(function (err) {
+        console.error(err);
+        if (err && err.stage === 'engine') {
+          showRetake([{ message: 'The face model couldn’t finish loading, so nothing was analysed (your photo was not uploaded). Check your connection and reload the page, then try again.' }]);
+        } else if (err && err.stage === 'decode') {
+          showRetake([{ message: 'Could not open that image. Try a JPG or PNG — or, on iPhone, set Camera → Formats to “Most Compatible”.' }]);
+        } else {
+          showRetake([{ message: 'Something went wrong while analysing that photo. Please try again.' }]);
+        }
+      });
+  }
+
+  /* The model (~7 MB with its runtime) downloads once on the first visit.
+     If a photo arrives before it's ready, say so instead of looking frozen,
+     and tag failures so the user isn't told their photo is the problem. */
+  var ENGINE_TIMEOUT = 120000;
+  function waitForEngine() {
+    if (engineReady) return Promise.resolve();
+    setAnalyzing('Loading the face model — first visit only (about 7 MB)…');
+    var t0 = Date.now();
+    var ticker = setInterval(function () {
+      var s = Math.round((Date.now() - t0) / 1000);
+      if (s >= 12) setAnalyzing('Still loading the face model (' + s + 's) — slow connection? It only downloads once.');
+    }, 1000);
+    return new Promise(function (res, rej) {
+      var timer = setTimeout(function () { var e = new Error('engine timeout'); e.stage = 'engine'; rej(e); }, ENGINE_TIMEOUT);
+      whenReady().then(function () { clearTimeout(timer); res(); },
+                       function (err) { clearTimeout(timer); err = err || new Error('engine failed'); err.stage = 'engine'; rej(err); });
+    }).then(function (v) { clearInterval(ticker); return v; }, function (e) { clearInterval(ticker); throw e; });
   }
 
   function decodeFile(file) {
@@ -274,6 +319,7 @@
   function toWorkCanvas(src) {
     var sw = src.videoWidth || src.naturalWidth || src.width;
     var sh = src.videoHeight || src.naturalHeight || src.height;
+    if (!sw || !sh) { var e = new Error('empty image'); e.stage = 'decode'; throw e; }
     var scale = Math.min(1, MAXDIM / Math.max(sw, sh));
     var w = Math.round(sw * scale), h = Math.round(sh * scale);
     var c = document.createElement('canvas'); c.width = w; c.height = h;

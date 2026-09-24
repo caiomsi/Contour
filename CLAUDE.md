@@ -105,6 +105,17 @@ history entry on release).
 — kept OUT of the repo. It skews middle-aged; widening it (younger faces, more skin
 tones, more hair types) is the most valuable next calibration step.
 
+**Upload robustness (v1.5.1):** the file input is `.visually-hidden` (NOT the
+`hidden` attribute — that made it unreachable by keyboard and flaky for some mobile
+pickers), `accept="image/*,.heic,.heif"` (a list of exact MIME types can make Android
+open a file browser instead of the gallery), and its value is reset on every
+`change` so re-picking the same photo after a retake still fires. `handleFile`
+decodes first, then `waitForEngine()` shows "Loading the face model — first visit
+only (about 7 MB)…" + an elapsed counter instead of looking frozen, times out at
+120 s, and errors are tagged `stage: 'engine' | 'decode'` so a failed model download
+is never reported as a bad photo. Photos dropped outside the drop zone are caught
+at window level (the browser would otherwise open the file and leave the app).
+
 **Camera** runs a live-hint loop pre-capture: ~2.5×/s it detects on a video frame,
 runs the same pure gates, and maps gate ids to short directions (HINT_TEXT).
 **HEIC uploads**: Safari decodes natively; elsewhere `decodeFile` lazy-loads

@@ -139,6 +139,10 @@ strong{color:var(--ink);font-weight:600}
   min-height:280px;border:1.5px dashed var(--accent-line);border-radius:var(--radius);background:var(--sheet);
   cursor:pointer;transition:border-color .2s,background .2s;text-align:center;padding:2rem}
 .dropzone:hover,.dropzone.drag{border-color:var(--accent);background:#fff}
+/* keeps the file input focusable + reachable by mobile pickers (unlike [hidden]) */
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.dropzone{position:relative}
+.dropzone:focus-within{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:3px}
 .dropzone-icon{width:52px;height:52px;border-radius:50%;background:var(--accent-tint);position:relative}
 .dropzone-icon::before,.dropzone-icon::after{content:"";position:absolute;background:var(--accent)}
 .dropzone-icon::before{width:2px;height:20px;left:25px;top:16px}
