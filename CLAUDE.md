@@ -43,9 +43,10 @@ js/faceshape.js         pure: soft prototype classifier (population z-scores) �
 js/scoring.js           pure: BANDS + WEIGHTS tables → 0–100 + composite
 js/skin.js              pure: pixel sampling → under-eye/redness signals + detectHairlineY
 js/gates.js             pure: quality gates + confidence (THRESH table)
-js/content.js           recommendation content pack (data only)
-js/styling.js           hair-type-aware pack: cuts (shape goal × texture × length), care, beard, eyewear, skin type, fringe
-js/recommendations.js   pure rules engine: findings (+ optional profile) → prioritized, deduped, capped recs
+js/content.js           quick-win checklists (data only): under-eye, redness, habits, photos, jawline, brows, basics
+js/hairstyles.js        library of ~28 named cuts: texture, length, goal fit, "ask for" barber script, steps, products, upkeep + pick()
+js/styling.js           pure: hairPlan() (goal, avoid, 3 picks, care, fringe, thinning) + quickWins() (skin routine, beard, glasses, brows)
+js/recommendations.js   pure rules engine: findings + quickWins → ≤8 prioritized step-by-step "Quick wins" 
 js/history.js           pure: local progress history (scores only, injected storage)
 js/profile.js           pure: "Tailor your plan" answers (hair texture etc.), localStorage only, injected storage
 js/landmarks-agg.js     pure: camera burst → medoid + similarity-align + per-landmark median
@@ -109,22 +110,34 @@ runs the same pure gates, and maps gate ids to short directions (HINT_TEXT).
 **HEIC uploads**: Safari decodes natively; elsewhere `decodeFile` lazy-loads
 `vendor/heic2any.min.js` and converts on-device.
 
-## Hair-type-aware plan (v1.3)
+## Report layout & advice (v1.4)
 
-Hair texture can't be read from one frontal photo, so the report has a **"Tailor
-your plan"** card (`#tailor`, `renderTailor` in main.js): chip groups for hair
-texture, strand thickness, length preference, facial hair, skin type, glasses, hair
-concern (`profile.FIELDS`). Answers live only in localStorage
-(`contour.profile.v1`), are validated to known values, and are **never** added to
-the deep-report payload. A change re-runs only `recommendations.generate` +
-`renderPlan`. With a texture set, `styling.recsFor` replaces the generic
-`grooming-<shape>` rec with: cut (shape goal × texture × length, folding in the
-secondary shape when "leaning"), care (texture + thickness), fringe (driven by the
-MEASURED upper third — skipped when the hairline is only the heuristic guess), beard,
-eyewear, skin-type routine, and lifestyle-only thinning advice. Without a profile a
-`profile-nudge` rec points at the card. Length preference — not gender — selects
-cuts. `test/styling.test.js` covers every shape × texture × length and runs an
-**ethics lint** over all copy (no flaw/surgery/filler/drug names/mewing claims).
+The report reads top-down as a guide: header (score, photo, face-shape card with the
+styling aim, "In short") → **01 Your hair** → **02 Quick wins** → **03 Your
+measurements** (compact plain-English rows, `PLAIN` map in main.js, tap for details)
+→ 04 AI deep report → 05 Methodology.
+
+**Your hair** (`renderHair`): the face-shape aim in one sentence, then the question
+"What's your hair like?" (texture + length up front; thickness, facial hair, skin
+type, glasses, thinning under "More about you" — `profile.FIELDS`, localStorage
+only, never in the deep-report payload). Once a texture is chosen,
+`styling.hairPlan` → `hairstyles.pick` returns the **3 best named cuts** for
+shape goal × texture × length (secondary shape folded in when "leaning"; thinning
+prefers short cuts). Each card: why it suits you, an **"Ask for" barber/stylist
+script with guard numbers and lengths (with a Copy button)**, numbered styling
+steps, products, upkeep. Below: texture care routine (+ thickness), measured-thirds
+fringe advice (skipped when the hairline is only guessed), thinning habits, and a
+"Skip these" list for the shape. Length preference — not gender — selects cuts.
+
+**Quick wins**: every item is `{title, because?, body, steps[]}` rendered as a
+checklist. Findings (under-eye, redness, symmetry, lens distortion, lower face) come
+first; then `styling.quickWins` (skin routine by skin type — always; beard & glasses
+from the profile; brows always, with extra steps when measured eye spacing/tilt is
+notable); then photos + one "everyday basics" card (kept even when capped).
+
+Tests: `hairstyles.test.js` checks every style is complete and every goal × texture
+× length preference yields ≥2 good picks; `styling.test.js` covers the plan/wins and
+runs an **ethics lint** over all copy (no flaw/surgery/filler/drug names/mewing claims).
 
 ## Scoring & tuning
 
@@ -174,7 +187,7 @@ that uploads the image.
 
 ## Tests & CI
 
-`node test/analysis.test.js` (and scoring/faceshape/skin/styling/recommendations/
+`node test/analysis.test.js` (and scoring/faceshape/skin/hairstyles/styling/recommendations/
 profile/landmarks-agg/history/deepreport/smoke) — or `for f in test/*.test.js; do node $f; done`.
 Zero dependencies, each prints `PASS`/`FAIL` and exits non-zero on failure.
 `.github/workflows/ci.yml` runs them all on push to `master` + PRs.

@@ -16,7 +16,7 @@ var sandbox = { console: console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
 
-var MODULES = ['geometry', 'analysis', 'faceshape', 'scoring', 'skin', 'gates', 'content', 'styling', 'recommendations', 'history', 'profile', 'landmarks-agg', 'deepreport'];
+var MODULES = ['geometry', 'analysis', 'faceshape', 'scoring', 'skin', 'gates', 'content', 'hairstyles', 'styling', 'recommendations', 'history', 'profile', 'landmarks-agg', 'deepreport'];
 var loadedOk = true;
 MODULES.forEach(function (name) {
   try {
@@ -32,7 +32,7 @@ t.ok(sandbox.ContourGeometry && sandbox.ContourAnalysis && sandbox.ContourScorin
   && sandbox.ContourFaceShape && sandbox.ContourSkin && sandbox.ContourGates
   && sandbox.ContourContent && sandbox.ContourRecommendations && sandbox.ContourHistory
   && sandbox.ContourDeepReport && sandbox.ContourStyling && sandbox.ContourProfile
-  && sandbox.ContourLandmarksAgg,
+  && sandbox.ContourLandmarksAgg && sandbox.ContourHairstyles,
   'all namespaces attached to window');
 
 // ---- drive the full pipeline (via the window globals) ----
@@ -47,7 +47,7 @@ try {
   var skin = SK.compute(img, m.pxOriginal);           // real skin sampling
   var sc = S.score(m, skin, 'high');
   out = REC.generate({ measurements: m, scores: sc, skin: skin, faceShape: shape });
-  outP = REC.generate({ measurements: m, scores: sc, skin: skin, faceShape: shape,
+  outP = sandbox.ContourStyling.hairPlan({ measurements: m, faceShape: shape,
     profile: sandbox.ContourProfile.validate({ hairTexture: 'wavy', lengthPref: 'medium', glasses: 'yes' }) });
 } catch (e) {
   errors++;
@@ -55,7 +55,7 @@ try {
 }
 t.eq(errors, 0, 'end-to-end pipeline runs without throwing');
 t.ok(out && out.length >= 1 && out.length <= 12, 'produced 1..12 recommendations');
-t.ok(outP && outP.some(function (r) { return r.id === 'hair-cut'; }), 'profile flows through to a hair-cut rec (browser path)');
+t.ok(outP && outP.styles.length >= 2 && outP.styles[0].ask, 'profile flows through to named cuts (browser path)');
 if (out) {
   var wellFormed = out.every(function (r) { return r.title && r.body && r.categoryLabel; });
   t.ok(wellFormed, 'every recommendation is well-formed (title/body/category)');

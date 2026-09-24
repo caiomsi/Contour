@@ -12,7 +12,7 @@
   var G = window.ContourGeometry, A = window.ContourAnalysis, FS = window.ContourFaceShape,
       SC = window.ContourScoring, SK = window.ContourSkin, GT = window.ContourGates,
       CT = window.ContourContent, RC = window.ContourRecommendations, H = window.ContourHistory,
-      DR = window.ContourDeepReport, PR = window.ContourProfile, AG = window.ContourLandmarksAgg;
+      DR = window.ContourDeepReport, PR = window.ContourProfile, ST = window.ContourStyling, AG = window.ContourLandmarksAgg;
 
   function $(s, r) { return (r || document).querySelector(s); }
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -368,10 +368,13 @@
     generateRecs();
   }
   function generateRecs() {
+    var known = state.hairlineAuto || state.hairlineDragged;
+    var lens = !!(state.gates && state.gates.advisories && state.gates.advisories.some(function (a) { return a.id === 'lens-distortion'; }));
     state.recs = RC.generate({
       measurements: state.m, scores: state.scores, skin: state.skin, faceShape: state.shape,
-      profile: state.profile, hairlineKnown: state.hairlineAuto || state.hairlineDragged
+      profile: state.profile, hairlineKnown: known, lensAdvisory: lens
     });
+    state.hair = ST.hairPlan({ measurements: state.m, faceShape: state.shape, profile: state.profile, hairlineKnown: known });
   }
 
   /* ---------------- gate helpers ---------------- */
@@ -428,7 +431,7 @@
       : 'Drag the dashed line to your hairline to refine the thirds.';
 
     renderToggles(); drawAll();
-    renderShapeCard(); renderSummary(); renderFeatures(); renderTailor(); renderPlan(); renderMethodology();
+    renderShapeCard(); renderSummary(); renderHair(); renderPlan(); renderFeatures(); renderMethodology();
     renderHistoryCard(); resetDeepReport(); renderDebug();
   }
 
@@ -688,7 +691,7 @@
     });
     cv.addEventListener('pointerup', function () {
       if (!state.drag) return;
-      state.drag = false; renderFeatures(); renderShapeCard(); renderPlan();
+      state.drag = false; renderFeatures(); renderShapeCard(); renderSummary(); renderHair(); renderPlan();
       if (state.historyId && H && typeof localStorage !== 'undefined') {
         var feats = {};
         for (var k in state.scores.features) feats[k] = state.scores.features[k].score;
@@ -701,153 +704,211 @@
   /* ---- side cards ---- */
   function renderShapeCard() {
     var c = $('#shape-card'); if (!c) return;
-    var sh = state.shape;
-    // shape categories are fuzzy — describe the match, don't print a spurious %
-    var strength = sh.leaning ? 'between two shapes' : sh.confidence >= 0.5 ? 'clear match' : 'closest match';
-    c.innerHTML = '<h4>Face shape</h4><p><span class="shape-name">' + sh.shape + '</span>' +
-      (sh.leaning ? '<span class="shape-lean">leaning ' + sh.secondary + '</span>' : '') +
-      '<span class="shape-conf">' + strength + '</span></p>' +
-      '<p>' + sh.note + '</p>' +
-      (!(state.hairlineAuto || state.hairlineDragged) ? '<p class="shape-caveat">Hairline estimated — drag it on the photo for a surer read.</p>' : '');
+    var sh = state.shape, hp = state.hair;
+    c.innerHTML = '';
+    c.appendChild(el('p', 'kicker-sm', 'Your face shape'));
+    var name = el('p', 'shape-line');
+    name.appendChild(el('span', 'shape-name', sh.shape));
+    if (sh.leaning) name.appendChild(el('span', 'shape-lean', 'leaning ' + sh.secondary));
+    c.appendChild(name);
+    c.appendChild(el('p', 'shape-aim', hp ? hp.aim : sh.note));
+    if (!(state.hairlineAuto || state.hairlineDragged)) {
+      c.appendChild(el('p', 'shape-caveat', 'Hairline estimated — drag the dashed line on your photo for a surer read.'));
+    }
   }
   function renderSummary() {
     var c = $('#summary-card'); if (!c) return;
-    var f = state.scores.features, items = [];
-    var lowest = 100;
-    for (var lk in f) if (f[lk].score < lowest) lowest = f[lk].score;
-    var strong = topFeatures(f, true), soft = topFeatures(f, false);
-    if (lowest >= 90) {
-      items.push('Everything measured sits within or near the typical ranges.');
-    } else {
-      if (strong) items.push('Closest to typical ranges: <strong>' + strong + '</strong>.');
-      if (soft) items.push('Furthest from typical: <strong>' + soft + '</strong>.');
-    }
-    items.push('This is one descriptive lens — see Methodology for what the numbers do and don’t mean.');
-    c.innerHTML = '<h4>In short</h4><ul><li>' + items.join('</li><li>') + '</li></ul>';
-  }
-  function topFeatures(f, high) {
-    var arr = Object.keys(f).map(function (k) { return { k: k, s: f[k].score, l: f[k].label }; });
-    arr.sort(function (a, b) { return high ? b.s - a.s : a.s - b.s; });
-    return arr.slice(0, 2).map(function (x) { return x.l.toLowerCase(); }).join(' and ');
+    var f = state.scores.features, off = [];
+    Object.keys(f).forEach(function (k) { if (f[k].tier !== 'typical' && k !== 'skin') off.push(PLAIN[k] ? PLAIN[k].label.toLowerCase() : k); });
+    var items = [];
+    items.push(off.length ? 'Most proportions are in the typical range. A little outside: <strong>' + off.slice(0, 3).join(', ') + '</strong>.'
+                          : 'All your proportions are in the typical range.');
+    var top = state.recs && state.recs[0];
+    if (top) items.push('Top quick win: <strong>' + top.title.toLowerCase() + '</strong>.');
+    items.push(state.hair && state.hair.needsTexture ? 'Tell Contour your hair type below to get 3 cuts picked for you.'
+                                                      : 'Your 3 best cuts are below, with what to ask your barber or stylist.');
+    c.innerHTML = '<p class="kicker-sm">In short</p><ul class="short-list"><li>' + items.join('</li><li>') + '</li></ul>';
   }
 
-  /* ---- feature cards ---- */
-  var DEFS = {
-    symmetry: { def: 'How closely your left and right sides mirror each other.', fmt: function (v) { return (v * 100).toFixed(1) + '% avg offset'; }, ideal: 'under 5%' },
-    thirds: { def: 'Balance of forehead, midface and lower-face heights.', fmt: function (v) { return (v * 100).toFixed(1) + '% max deviation'; }, ideal: 'under 3.5%' },
-    fifths: { def: 'Whether the face divides into five even eye-widths across.', fmt: function (v) { return (v * 100).toFixed(1) + '% deviation'; }, ideal: 'under 3%' },
-    canthal: { def: 'Tilt of each eye from inner to outer corner.', fmt: function (v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + '°'; }, ideal: '+1° to +10°' },
-    interocular: { def: 'Spacing between the eyes relative to eye width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.10–1.42×' },
-    nose: { def: 'Nose width relative to the inner-eye distance.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.90–1.25×' },
-    mouthNose: { def: 'Mouth width relative to nose width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.30–1.65×' },
-    lips: { def: 'Upper-lip height relative to lower lip.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.45–0.72×' },
-    midface: { def: 'Midface height relative to face width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.48–0.60×' },
-    fwhr: { def: 'Facial width-to-height (cheekbones vs upper face).', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.75–2.20× · contested' },
-    skin: { def: 'Under-eye and redness signals from the photo (lighting-dependent).', fmt: function (v) { return Math.round(v) + '/100'; }, ideal: 'photo-dependent' }
+  /* ---- measurements (compact, plain-English list) ---- */
+  var PLAIN = {
+    symmetry: { label: 'Symmetry', def: 'How closely your left and right sides mirror each other.', fmt: function (v) { return (v * 100).toFixed(1) + '% offset'; }, ideal: 'under 5%' },
+    thirds: { label: 'Face thirds', def: 'Forehead, middle and lower face — are the three heights even?', fmt: function (v) { return (v * 100).toFixed(1) + '% off even'; }, ideal: 'under 3.5%' },
+    fifths: { label: 'Face width balance', def: 'Does your face divide into five even eye-widths across?', fmt: function (v) { return (v * 100).toFixed(1) + '% off even'; }, ideal: 'under 3%' },
+    canthal: { label: 'Eye tilt', def: 'The angle from the inner to the outer corner of each eye.', fmt: function (v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + '°'; }, ideal: '+1° to +10°' },
+    interocular: { label: 'Eye spacing', def: 'The gap between your eyes compared with the width of one eye.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.10–1.42×' },
+    nose: { label: 'Nose width', def: 'Nose width compared with the gap between your eyes.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.90–1.25×' },
+    mouthNose: { label: 'Mouth width', def: 'Mouth width compared with nose width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.30–1.65×' },
+    lips: { label: 'Lip balance', def: 'Upper-lip height compared with the lower lip.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.45–0.72×' },
+    midface: { label: 'Midface length', def: 'Eyes-to-mouth height compared with face width.', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '0.48–0.60×' },
+    fwhr: { label: 'Face width-to-height', def: 'Cheekbone width compared with upper-face height (a contested measure).', fmt: function (v) { return v.toFixed(2) + '×'; }, ideal: '1.75–2.20×' },
+    skin: { label: 'Skin (from photo)', def: 'Under-eye and redness signals — depends heavily on lighting.', fmt: function (v) { return Math.round(v) + '/100'; }, ideal: 'lighting-dependent' }
   };
-  function tierPhrase(t) { return t === 'typical' ? 'within the typical range' : t === 'slightly' ? 'a little outside the typical range' : 'outside the typical range'; }
+  var DEFS = PLAIN;   // methodology glossary uses the same wording
+  var TIER_TEXT = { typical: 'Typical', slightly: 'Slightly outside', outside: 'Outside typical' };
   function renderFeatures() {
-    var grid = $('#feature-grid'); if (!grid) return; grid.innerHTML = '';
+    var list = $('#feature-grid'); if (!list) return; list.innerHTML = '';
     var f = state.scores.features;
     Object.keys(f).forEach(function (k) {
-      var fs = f[k], d = DEFS[k] || { def: '', fmt: function (v) { return v; }, ideal: '' };
-      var card = el('div', 'feature');
-      card.innerHTML =
-        '<div class="feature-top"><span class="feature-name">' + fs.label + '</span>' +
-        '<span class="feature-score t-' + fs.tier + '">' + fs.score + '</span></div>' +
-        '<div class="gauge"><span class="gauge-band" style="left:80%;width:20%"></span>' +
-        '<span class="gauge-fill t-' + fs.tier + '" style="width:' + fs.score + '%"></span></div>' +
-        '<div class="feature-val">' + d.fmt(fs.value) + ' · typical ' + d.ideal + '</div>' +
-        '<p class="feature-note">' + d.def + ' Here it reads ' + tierPhrase(fs.tier) + '.' +
-        (k === 'skin' ? ' Treat this as a soft hint, not a measurement.' : '') + '</p>';
-      grid.appendChild(card);
+      var fs = f[k], d = PLAIN[k] || { label: fs.label, def: '', fmt: function (v) { return v; }, ideal: '' };
+      var row = el('details', 'mrow');
+      var sum = el('summary', 'mrow-sum');
+      sum.appendChild(el('span', 'mrow-name', d.label));
+      sum.appendChild(el('span', 'mrow-val', d.fmt(fs.value)));
+      sum.appendChild(el('span', 'pill t-' + fs.tier, TIER_TEXT[fs.tier]));
+      row.appendChild(sum);
+      row.appendChild(el('p', 'mrow-def', d.def + ' Typical range: ' + d.ideal + '. Score ' + fs.score + '/100.' +
+        (k === 'skin' ? ' Treat this as a soft hint, not a measurement.' : '')));
+      list.appendChild(row);
     });
   }
 
-  /* ---- "Tailor your plan" (hair type & co.) ----
-     Chip groups with radio semantics; tapping the selected chip clears
-     it. Every change saves locally and regenerates only the plan. */
-  function renderTailor() {
-    var wrap = $('#tailor'); if (!wrap || !PR) return;
-    var p = state.profile || {};
-    wrap.innerHTML = '';
-    var det = el('details', 'tailor-box');
-    if (PR.isEmpty(p)) det.open = true;
-    var sum = el('summary', 'tailor-summary');
-    var sumTitle = el('span', 'tailor-title'); sumTitle.textContent = 'Tailor your plan';
-    var sumSub = el('span', 'tailor-sub');
-    sumSub.textContent = PR.isEmpty(p) ? 'Add your hair type for cut & care advice · stays on this device' : PR.summary(p) || 'Answers saved on this device';
-    sum.appendChild(sumTitle); sum.appendChild(sumSub); det.appendChild(sum);
-
-    var body = el('div', 'tailor-body');
-    PR.ORDER.forEach(function (field) {
-      var f = PR.FIELDS[field];
-      var grp = el('div', 'tailor-group');
-      grp.setAttribute('role', 'group');
-      var lab = el('p', 'tailor-label'); lab.textContent = f.label; lab.id = 'tl-' + field;
-      grp.setAttribute('aria-labelledby', lab.id);
-      grp.appendChild(lab);
-      var chips = el('div', 'chips');
-      f.options.forEach(function (opt) {
-        var b = el('button', 'chip');
-        b.type = 'button';
-        b.textContent = opt[1];
-        if (opt[2]) b.title = opt[2];
-        var on = p[field] === opt[0];
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        if (on) b.classList.add('on');
-        b.addEventListener('click', function () {
-          var next = Object.assign({}, state.profile);
-          if (next[field] === opt[0]) delete next[field]; else next[field] = opt[0];
-          setProfile(next, field);
-        });
-        chips.appendChild(b);
+  /* ---- "Your hair" + profile questions ----
+     Hair texture can't be read from one photo, so we ask (profile.js,
+     stored only in this browser). Tapping a selected option clears it. */
+  function chipGroup(field, opts) {
+    opts = opts || {};
+    var f = PR.FIELDS[field], p = state.profile || {};
+    var grp = el('div', 'q-group' + (opts.big ? ' q-big' : ''));
+    grp.setAttribute('role', 'group');
+    var lab = el('p', 'q-label'); lab.textContent = opts.label || f.label; lab.id = 'tl-' + field;
+    grp.setAttribute('aria-labelledby', lab.id);
+    grp.appendChild(lab);
+    var chips = el('div', 'chips');
+    f.options.forEach(function (o) {
+      var b = el('button', 'chip'); b.type = 'button';
+      var on = p[field] === o[0];
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) b.classList.add('on');
+      var t = el('span', 'chip-t'); t.textContent = o[1]; b.appendChild(t);
+      if (opts.big && o[2]) { var h = el('span', 'chip-h'); h.textContent = o[2]; b.appendChild(h); }
+      b.addEventListener('click', function () {
+        var next = Object.assign({}, state.profile);
+        if (next[field] === o[0]) delete next[field]; else next[field] = o[0];
+        setProfile(next, field);
       });
-      grp.appendChild(chips); body.appendChild(grp);
+      chips.appendChild(b);
     });
-    var foot = el('div', 'tailor-foot');
-    var note = el('p', 'tailor-note'); note.textContent = 'Saved only in this browser — never uploaded, not even with the AI report.';
-    foot.appendChild(note);
-    if (!PR.isEmpty(p)) {
-      var forget = el('button', 'link-btn'); forget.type = 'button'; forget.textContent = 'Forget my answers';
+    grp.appendChild(chips);
+    return grp;
+  }
+  function stepsList(steps, cls) {
+    var ol = el('ol', cls || 'steps');
+    steps.forEach(function (s2) { var li = document.createElement('li'); li.textContent = s2; ol.appendChild(li); });
+    return ol;
+  }
+  function renderHair() {
+    var wrap = $('#hair'); if (!wrap || !state.hair) return;
+    var hp = state.hair; wrap.innerHTML = '';
+
+    // 1) the goal, in one readable sentence
+    var lead = el('div', 'hair-lead');
+    var h = el('p', 'hair-goal'); h.textContent = hp.aim; lead.appendChild(h);
+    if (hp.alsoAim) { var a2 = el('p', 'hair-also'); a2.textContent = hp.alsoAim; lead.appendChild(a2); }
+    wrap.appendChild(lead);
+
+    // 2) questions: texture + length up front, the rest tucked away
+    var qs = el('div', 'questions' + (hp.needsTexture ? ' ask' : ''));
+    if (hp.needsTexture) qs.appendChild(el('p', 'q-title', 'What’s your hair like? Pick one to see 3 cuts chosen for you.'));
+    qs.appendChild(chipGroup('hairTexture', { big: hp.needsTexture, label: 'Hair type' }));
+    qs.appendChild(chipGroup('lengthPref', { label: 'Length you want' }));
+    var more = el('details', 'more-q');
+    var ms = el('summary', null, 'More about you <span class="muted">— improves beard, skin and glasses tips</span>');
+    more.appendChild(ms);
+    var mg = el('div', 'more-grid');
+    ['hairThickness', 'facialHair', 'skinType', 'glasses', 'hairConcern'].forEach(function (fld) { mg.appendChild(chipGroup(fld)); });
+    more.appendChild(mg);
+    if (openMore) more.open = true;
+    more.addEventListener('toggle', function () { openMore = more.open; });
+    qs.appendChild(more);
+    var foot = el('div', 'q-foot');
+    foot.appendChild(el('span', 'muted', 'Your answers stay in this browser only.'));
+    if (!PR.isEmpty(state.profile)) {
+      var forget = el('button', 'link-btn', 'Forget my answers'); forget.type = 'button';
       forget.addEventListener('click', function () { setProfile({}, null, true); });
       foot.appendChild(forget);
     }
-    body.appendChild(foot); det.appendChild(body); wrap.appendChild(det);
+    qs.appendChild(foot);
+    wrap.appendChild(qs);
+
+    // 3) the picks
+    if (hp.styles.length) {
+      var grid = el('div', 'styles');
+      hp.styles.forEach(function (st, i) {
+        var c = el('article', 'style-card');
+        var top = el('div', 'style-top');
+        top.appendChild(el('span', 'style-rank', i === 0 ? 'Best match' : 'Also great'));
+        top.appendChild(el('span', 'style-len', st.length));
+        c.appendChild(top);
+        c.appendChild(el('h4', 'style-name', st.name));
+        var why = el('p', 'style-why'); why.textContent = st.why; c.appendChild(why);
+        var askHead = el('div', 'ask-head');
+        askHead.appendChild(el('span', 'mini-label', 'Ask for'));
+        var copy = el('button', 'copy-btn', 'Copy'); copy.type = 'button';
+        copy.setAttribute('aria-label', 'Copy what to ask for ' + st.name);
+        copy.addEventListener('click', function () {
+          var txt = st.name + ': ' + st.ask;
+          var done = function () { copy.textContent = 'Copied'; setTimeout(function () { copy.textContent = 'Copy'; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, function () {});
+        });
+        askHead.appendChild(copy);
+        c.appendChild(askHead);
+        var ask = el('blockquote', 'ask'); ask.textContent = st.ask; c.appendChild(ask);
+        c.appendChild(el('span', 'mini-label', 'Style it'));
+        c.appendChild(stepsList(st.steps));
+        var meta = el('dl', 'style-meta');
+        meta.innerHTML = '<div><dt>Products</dt><dd></dd></div><div><dt>Upkeep</dt><dd></dd></div>';
+        meta.querySelectorAll('dd')[0].textContent = st.products;
+        meta.querySelectorAll('dd')[1].textContent = st.upkeep;
+        c.appendChild(meta);
+        grid.appendChild(c);
+      });
+      wrap.appendChild(grid);
+    }
+
+    // 4) care, fringe, thinning, avoid
+    var row = el('div', 'hair-extras');
+    if (hp.care) row.appendChild(winCard({ title: hp.care.title, steps: hp.care.steps }));
+    if (hp.fringe) row.appendChild(winCard({ title: hp.fringe.title, because: hp.fringe.because, body: hp.fringe.body, steps: [] }));
+    if (hp.thinning) row.appendChild(winCard({ title: hp.thinning.title, steps: hp.thinning.steps }));
+    var av = el('div', 'win avoid');
+    av.appendChild(el('h4', 'win-title', 'Skip these for your face shape'));
+    var ul = el('ul', 'avoid-list');
+    hp.avoid.forEach(function (x) { var li = document.createElement('li'); li.textContent = x; ul.appendChild(li); });
+    av.appendChild(ul);
+    row.appendChild(av);
+    wrap.appendChild(row);
   }
+  var openMore = false;
   function setProfile(next, focusField, forget) {
     if (forget) { try { PR.clear(localStorage); } catch (e) {} state.profile = {}; }
     else { try { state.profile = PR.save(localStorage, next); } catch (e) { state.profile = PR.validate(next); } }
-    generateRecs(); renderPlan(); renderTailor();
-    var det = $('#tailor .tailor-box'); if (det) det.open = true;
-    // keep keyboard focus on the group the user was working in
-    if (focusField) { var g = document.querySelector('[aria-labelledby="tl-' + focusField + '"] .chip.on, [aria-labelledby="tl-' + focusField + '"] .chip'); if (g) g.focus(); }
+    generateRecs(); renderShapeCard(); renderSummary(); renderHair(); renderPlan();
+    if (focusField) {
+      var g = document.querySelector('[aria-labelledby="tl-' + focusField + '"] .chip.on') ||
+              document.querySelector('[aria-labelledby="tl-' + focusField + '"] .chip');
+      if (g) g.focus({ preventScroll: true });
+    }
   }
 
-  /* ---- plan ---- */
+  /* ---- quick wins ---- */
+  function winCard(r) {
+    var card = el('article', 'win');
+    card.appendChild(el('h4', 'win-title', r.title));
+    if (r.because) { var b = el('p', 'win-because'); b.textContent = 'Because ' + r.because.replace(/^Your/, 'your').replace(/\.$/, '') + '.'; card.appendChild(b); }
+    if (r.body) { var p = el('p', 'win-body'); p.textContent = r.body; card.appendChild(p); }
+    if (r.steps && r.steps.length) card.appendChild(stepsList(r.steps, 'checks'));
+    return card;
+  }
   function renderPlan() {
     var wrap = $('#plan'); if (!wrap) return; wrap.innerHTML = '';
-    var groups = RC.groupByCategory(state.recs);
-    groups.forEach(function (g) {
-      var block = el('div', 'plan-group');
-      block.appendChild(el('p', 'plan-group-label', g.label));
-      var items = el('div', 'plan-items');
-      g.items.forEach(function (r) {
-        var card = el('div', 'rec');
-        card.innerHTML = '<h4 class="rec-title">' + r.title + '</h4>' +
-          (r.because ? '<p class="rec-because">Because ' + r.because + '.</p>' : '') +
-          '<p class="rec-body">' + r.body + '</p>' +
-          '<p class="rec-why">' + r.why + '</p>';
-        items.appendChild(card);
-      });
-      block.appendChild(items); wrap.appendChild(block);
-    });
+    state.recs.forEach(function (r) { wrap.appendChild(winCard(r)); });
   }
 
   /* ---- methodology ---- */
   function renderMethodology() {
     var wrap = $('#methodology-body'); if (!wrap) return;
-    var defs = Object.keys(DEFS).map(function (k) { return '<dt>' + (SC.LABELS[k] || k) + '</dt><dd>' + DEFS[k].def + ' Typical ' + DEFS[k].ideal + '.</dd>'; }).join('');
+    var defs = Object.keys(DEFS).map(function (k) { return '<dt>' + DEFS[k].label + '</dt><dd>' + DEFS[k].def + ' Typical ' + DEFS[k].ideal + '.</dd>'; }).join('');
     wrap.innerHTML =
       acc('How Contour works',
         '<p>A face-landmark model runs entirely in your browser and returns hundreds of points. Contour levels your eyes to horizontal, scales everything by the distance between your pupils (so image size doesn’t matter), then compares a set of classic proportion ratios to common reference ranges. Each score is a simple, traceable distance from an “ideal” band.</p>') +
@@ -858,7 +919,7 @@
       acc('What affects accuracy',
         '<p>Camera angle, lens distance (close selfies enlarge the nose and forehead), lighting, expression, hair, and glasses all shift the numbers. Contour gates the worst cases and shows a confidence level, but a straight-on, neutral, evenly-lit photo at arm’s length is always most reliable.</p>') +
       acc('Your hair & skin answers',
-        '<p>Hair texture can’t be read reliably from a single front-facing photo, so Contour asks. Your answers in “Tailor your plan” are saved only in this browser, are never sent anywhere (including the optional AI report), and are used only to choose which cut, care and grooming suggestions to show. “Forget my answers” deletes them.</p>') +
+        '<p>Hair texture can’t be read reliably from a single front-facing photo, so Contour asks. Your answers in the “Your hair” section are saved only in this browser, are never sent anywhere (including the optional AI report), and are used only to choose which cut, care and grooming suggestions to show. “Forget my answers” deletes them.</p>') +
       acc('How accuracy is protected',
         '<p>Small head turns are corrected with the landmark model’s depth estimate before measuring, so a slightly angled photo doesn’t read as asymmetry. Camera captures combine several frames to cancel jitter. Face shape is compared against the spread of real measured faces and shown as a closest match, or as “leaning” when you sit between two shapes.</p>') +
       acc('What each measurement means', '<dl>' + defs + '</dl>');

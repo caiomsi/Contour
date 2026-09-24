@@ -1,4 +1,5 @@
-/* recommendations.js — rule firing, ties-to-finding, dedupe, cap, baseline. */
+/* recommendations.js — quick wins: findings fire, tailored items merge,
+   every item is a checklist, dedupe, cap, basics always present. */
 'use strict';
 
 var R = require('../js/recommendations.js');
@@ -7,96 +8,55 @@ var t = require('../test/_assert.js').suite('RECOMMENDATIONS');
 function has(list, id) { return list.some(function (x) { return x.id === id; }); }
 function get(list, id) { return list.filter(function (x) { return x.id === id; })[0]; }
 
-// context builder with sensible "all good" defaults
 function ctx(over) {
   var base = {
     measurements: {},
-    scores: { features: {
-      symmetry: { score: 90 }, canthal: { score: 90 }, interocular: { score: 90 }, fwhr: { score: 90 }
-    } },
-    skin: { underEye: { flagged: false, delta: 0.05 }, redness: { flagged: false, index: 0.10 } },
-    faceShape: { shape: 'oval' }
+    scores: { features: { symmetry: { score: 90 }, canthal: { score: 90 }, interocular: { score: 90 }, fwhr: { score: 90 } } },
+    skin: { underEye: { flagged: false, delta: 0.05 }, redness: { flagged: false, index: 0.02 } },
+    faceShape: { shape: 'oval', secondary: 'round', leaning: false }
   };
   return Object.assign(base, over || {});
 }
 
-// ---- flagged under-eye -> sleep/hydration recs, with a "because" ----
-var c1 = ctx({ skin: { underEye: { flagged: true, delta: 0.2 }, redness: { flagged: false, index: 0.1 } } });
-var l1 = R.generate(c1);
-t.ok(has(l1, 'underEye-sleep'), 'under-eye flag -> sleep rec');
-t.ok(has(l1, 'underEye-hydration'), 'under-eye flag -> hydration rec');
-t.ok(get(l1, 'underEye-sleep').because && get(l1, 'underEye-sleep').because.length > 5, 'rec tied to a finding');
+// ---- nothing notable -> a short, useful default list ----
+var l0 = R.generate(ctx());
+t.ok(has(l0, 'skin-routine') && has(l0, 'brows') && has(l0, 'photos') && has(l0, 'basics'), 'defaults: skin routine, brows, photos, basics');
+t.ok(!has(l0, 'under-eye') && !has(l0, 'redness') && !has(l0, 'sym-habits'), 'no findings -> no finding items');
+t.ok(l0.every(function (x) { return x.steps.length >= 3 && x.title && x.body; }), 'every item is a checklist (>=3 steps)');
 
-// ---- flagged redness -> skincare/spf recs ----
-var c2 = ctx({ skin: { underEye: { flagged: false, delta: 0.05 }, redness: { flagged: true, index: 0.24 } } });
-var l2 = R.generate(c2);
-t.ok(has(l2, 'redness-skincare'), 'redness -> skincare rec');
-t.ok(has(l2, 'redness-spf'), 'redness -> spf rec');
-t.ok(has(l2, 'redness-triggers'), 'strong redness -> triggers rec');
+// ---- findings fire with a because ----
+var l1 = R.generate(ctx({ skin: { underEye: { flagged: true, delta: 0.25 }, redness: { flagged: true, index: 0.12 } } }));
+t.ok(has(l1, 'under-eye') && get(l1, 'under-eye').because.length > 10, 'under-eye flag -> checklist tied to finding');
+t.ok(has(l1, 'redness'), 'redness flag -> calm-redness checklist');
+t.eq(l1[0].priority, 9, 'findings come first');
 
-// ---- low symmetry score -> asymmetry recs ----
-var c3 = ctx({ scores: { features: { symmetry: { score: 60 }, canthal: { score: 90 }, interocular: { score: 90 }, fwhr: { score: 90 } } } });
-var l3 = R.generate(c3);
-t.ok(has(l3, 'asymmetry-sleep'), 'low symmetry -> asymmetry sleep/chewing rec');
-t.ok(has(l3, 'asymmetry-posture'), 'low symmetry -> posture rec');
+var l2 = R.generate(ctx({ scores: { features: { symmetry: { score: 60 }, fwhr: { score: 90 } } } }));
+t.ok(has(l2, 'sym-habits') && get(l2, 'photos').because, 'low symmetry -> habits + photo tips with reason');
+t.ok(get(R.generate(ctx({ lensAdvisory: true })), 'photos').because.indexOf('close up') >= 0, 'close-up photo -> photo tips explain lens distortion');
+t.ok(has(R.generate(ctx({ faceShape: { shape: 'round' } })), 'lower-face'), 'round face -> jawline habits');
 
-// ---- face shape -> grooming rec present ----
-var l4 = R.generate(ctx({ faceShape: { shape: 'round' } }));
-t.ok(has(l4, 'grooming-round'), 'round shape -> grooming-round');
-t.ok(get(l4, 'grooming-round').category === 'grooming', 'grooming rec categorized');
+// ---- profile items merge in ----
+var lp = R.generate(ctx({ profile: { facialHair: 'full', glasses: 'yes', skinType: 'dry' } }));
+t.ok(has(lp, 'beard') && has(lp, 'eyewear'), 'profile -> beard + glasses items');
+t.ok(/dry/.test(get(lp, 'skin-routine').title), 'skin routine tailored to skin type');
+t.ok(!lp.some(function (x) { return x.category === 'hair'; }), 'hair is its own section, not a quick win');
 
-// ---- everything good -> still returns baselines incl SPF + sleep ----
-var l5 = R.generate(ctx());
-t.ok(has(l5, 'base-spf'), 'always ensures SPF baseline');
-t.ok(has(l5, 'base-sleep'), 'always ensures sleep baseline');
-t.ok(l5.length >= 3, 'returns a usable minimum, got ' + l5.length);
-
-// ---- dedupe: no duplicate ids ----
-var ids = {}, dup = false;
-l1.forEach(function (x) { if (ids[x.id]) dup = true; ids[x.id] = true; });
-t.ok(!dup, 'no duplicate recommendation ids');
-
-// ---- cap: fire everything, never exceed CAP ----
-var cAll = ctx({
+// ---- dedupe + cap + basics survives ----
+var busy = R.generate(ctx({
   skin: { underEye: { flagged: true, delta: 0.3 }, redness: { flagged: true, index: 0.3 } },
-  scores: { features: { symmetry: { score: 40 }, canthal: { score: 40 }, interocular: { score: 40 }, fwhr: { score: 40 } } },
-  faceShape: { shape: 'round' }
-});
-var lAll = R.generate(cAll);
-t.ok(lAll.length <= R.CAP, 'capped at ' + R.CAP + ', got ' + lAll.length);
-t.ok(lAll.length > 6, 'many findings -> a full plan');
+  scores: { features: { symmetry: { score: 40 }, fwhr: { score: 40 } } },
+  faceShape: { shape: 'round' }, lensAdvisory: true,
+  profile: { facialHair: 'full', glasses: 'yes', skinType: 'oily' },
+  measurements: { interocular: { ratio: 1.5 } }
+}));
+t.ok(busy.length <= R.CAP, 'capped at ' + R.CAP + ' (got ' + busy.length + ')');
+var ids = {}, dup = false; busy.forEach(function (x) { if (ids[x.id]) dup = true; ids[x.id] = 1; });
+t.ok(!dup, 'no duplicate ids');
+t.ok(has(busy, 'basics'), 'basics card kept even in a busy plan');
+t.ok(has(busy, 'under-eye') && has(busy, 'redness'), 'findings survive the cap');
 
-// ---- sorted by priority (descending) ----
-var sorted = true;
-for (var i = 1; i < lAll.length; i++) if (lAll[i].priority > lAll[i - 1].priority) sorted = false;
-t.ok(sorted, 'recommendations sorted by priority desc');
-
-// ---- grouping helper ----
-var groups = R.groupByCategory(lAll);
-t.ok(groups.length > 0 && groups[0].items.length > 0, 'groupByCategory returns non-empty groups');
-var totalGrouped = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
-t.eq(totalGrouped, lAll.length, 'grouping preserves all items');
-
-// ---- no profile: generic shape styling + a nudge to share hair type ----
-var np = R.generate(ctx({ faceShape: { shape: 'round' } }));
-t.ok(has(np, 'grooming-round'), 'no profile -> generic face-shape styling kept');
-t.ok(has(np, 'profile-nudge'), 'no profile -> nudge to add hair type');
-t.ok(!has(np, 'hair-cut'), 'no profile -> no texture-specific cut');
-
-// ---- with a hair profile: texture-aware recs replace the generic one ----
-var wp = R.generate(ctx({ faceShape: { shape: 'round', secondary: 'oval', leaning: false },
-  profile: { hairTexture: 'curly', hairThickness: 'fine', lengthPref: 'long', facialHair: 'full', glasses: 'yes', skinType: 'dry' } }));
-t.ok(has(wp, 'hair-cut') && has(wp, 'hair-care'), 'profile -> cut + care recs');
-t.ok(!has(wp, 'grooming-round'), 'profile texture -> generic shape rec replaced');
-t.ok(!has(wp, 'profile-nudge'), 'profile texture -> no nudge');
-t.ok(has(wp, 'beard') && has(wp, 'eyewear') && has(wp, 'skin-type'), 'beard, eyewear, skin-type recs present');
-t.eq(get(wp, 'hair-cut').categoryLabel, 'Hair & Care', 'hair recs grouped under Hair & Care');
-t.ok(get(wp, 'hair-cut').because.length > 10, 'profile recs carry a because');
-
-// ---- findings still win space when everything fires ----
-var busy = R.generate(Object.assign(cAll, { profile: { hairTexture: 'coily', facialHair: 'full', glasses: 'yes', skinType: 'oily', hairConcern: 'thinning' } }));
-t.ok(busy.length <= R.CAP, 'busy plan still capped at ' + R.CAP);
-t.ok(has(busy, 'underEye-sleep') && has(busy, 'redness-skincare'), 'skin findings survive a full hair profile');
-t.ok(has(busy, 'hair-cut'), 'cut rec survives a busy plan');
+// ---- grouping helper still works ----
+var g = R.groupByCategory(busy);
+t.eq(g.reduce(function (n, x) { return n + x.items.length; }, 0), busy.length, 'grouping preserves all items');
 
 t.done();

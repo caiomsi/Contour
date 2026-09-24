@@ -82,8 +82,9 @@
         <p class="hero-lede">
           Contour maps your facial proportions with an on-device model, scores them
           against common (and culture-bound) reference ranges, and turns the
-          observations into a practical, <strong>lifestyle-only</strong> action plan —
-          sleep, skin, hydration, habits, and hair &amp; styling matched to your hair type.
+          observations into practical advice: <strong>haircuts picked for your face and hair
+          type</strong> (with exactly what to ask your barber), plus step-by-step skin, brow,
+          beard and photo tips.
         </p>
         <div class="hero-actions">
           <button class="btn btn-solid" id="cta-upload">Analyze a photo</button>
@@ -166,8 +167,8 @@
               <span class="composite-scale">/100</span>
             </div>
             <div class="composite-meta">
-              <p class="composite-label">Harmony composite</p>
-              <p class="composite-note">A weighted blend of the proportion scores below. It is one lens, not a verdict.</p>
+              <p class="composite-label">Proportion score</p>
+              <p class="composite-note">How closely your proportions match common reference ranges. One lens, not a verdict on your looks.</p>
               <div class="badges">
                 <span class="badge" id="confidence-badge">Confidence: —</span>
                 <span class="badge badge-privacy">This photo stayed on your device</span>
@@ -197,18 +198,22 @@
           </div>
         </div>
 
-        <!-- feature score cards -->
-        <h3 class="section-label"><span class="folio">01</span> Proportions</h3>
-        <div class="feature-grid" id="feature-grid"></div>
+        <!-- 01 hair: goal, questions, 3 picked cuts, care -->
+        <h3 class="section-label" id="hair-title"><span class="folio">01</span> Your hair</h3>
+        <div class="hair" id="hair"></div>
 
-        <!-- personalized plan -->
-        <h3 class="section-label"><span class="folio">02</span> Your action plan</h3>
-        <p class="section-intro">Lifestyle-only suggestions, ordered by relevance to what Contour observed. Nothing here is medical or surgical advice.</p>
-        <div class="tailor" id="tailor"></div>
-        <div class="plan" id="plan"></div>
+        <!-- 02 quick wins: step-by-step checklists -->
+        <h3 class="section-label"><span class="folio">02</span> Quick wins</h3>
+        <p class="section-intro">Practical things you can do this week, most relevant first. Grooming and everyday habits only — nothing medical.</p>
+        <div class="wins" id="plan"></div>
+
+        <!-- 03 measurements: compact plain-English list -->
+        <h3 class="section-label"><span class="folio">03</span> Your measurements</h3>
+        <p class="section-intro">How your proportions compare with common reference ranges. The ranges are cultural conventions, not a measure of attractiveness. Tap a row for details.</p>
+        <div class="mlist" id="feature-grid"></div>
 
         <!-- opt-in AI deep report — the ONE feature that sends the photo off-device -->
-        <h3 class="section-label"><span class="folio">03</span> AI deep report <span class="dr-tag">optional · leaves your device</span></h3>
+        <h3 class="section-label"><span class="folio">04</span> AI deep report <span class="dr-tag">optional · leaves your device</span></h3>
         <div class="deep-report" id="deep-report">
           <div class="dr-intro" id="dr-intro">
             <p class="dr-explain">
@@ -226,7 +231,7 @@
         </div>
 
         <!-- methodology -->
-        <h3 class="section-label" id="methodology"><span class="folio">04</span> Methodology &amp; limits</h3>
+        <h3 class="section-label" id="methodology"><span class="folio">05</span> Methodology &amp; limits</h3>
         <div class="accordion" id="methodology-body"></div>
 
         <!-- debug (only with ?debug=1) -->
@@ -260,6 +265,7 @@
   <script src="js/skin.js"></script>
   <script src="js/gates.js"></script>
   <script src="js/content.js"></script>
+  <script src="js/hairstyles.js"></script>
   <script src="js/styling.js"></script>
   <script src="js/recommendations.js"></script>
   <script src="js/history.js"></script>

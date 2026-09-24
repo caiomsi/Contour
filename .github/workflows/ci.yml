@@ -23,7 +23,9 @@ jobs:
         run: node test/skin.test.js
       - name: Burst aggregation (camera multi-frame)
         run: node test/landmarks-agg.test.js
-      - name: Styling (hair-type-aware plan + ethics lint)
+      - name: Hairstyle library (coverage + barber scripts)
+        run: node test/hairstyles.test.js
+      - name: Styling (hair plan, quick wins, ethics lint)
         run: node test/styling.test.js
       - name: Recommendations (rules, dedupe, cap)
         run: node test/recommendations.test.js

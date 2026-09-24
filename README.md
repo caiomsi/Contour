@@ -46,21 +46,25 @@ server-side, with the response validated and rendered as plain text. It's
 rate-limited (a small number of free reports per day) because each one costs
 real money to generate.
 
-## Tailored to your hair type
+## Real, practical advice
 
-A single front-facing photo can't tell straight hair from coily, so Contour asks.
-The optional **Tailor your plan** card on the report takes a few taps — hair
-texture, strand thickness, the length you like, facial hair, skin type, glasses —
-and the plan updates instantly with:
+The report is laid out as a short guide:
 
-- cuts that balance your face shape **and** work with your texture, at the length
-  you prefer (chosen by length, not gender),
-- a care routine for your texture and thickness,
-- fringe advice driven by your *measured* forehead proportion,
-- beard shapes, glasses frames and a skin-type routine when relevant.
+1. **Your hair.** Tell Contour your hair type (straight, wavy, curly or coily) and the
+   length you like. It picks the **3 best named cuts** for your face shape *and*
+   texture. Each one comes with exactly what to **ask your barber or stylist**
+   (clipper guards, lengths, technique — copyable), how to style it in 2–3 steps,
+   which products, and how often to trim. Plus a care routine for your texture, a
+   fringe tip based on your measured forehead, and a list of cuts to skip.
+2. **Quick wins.** Short checklists you can do this week: a daily skin routine for
+   your skin type, beard shaping and neckline how-to, glasses that fit, brow grooming
+   (tailored to your measured eye spacing), under-eye and redness tips when the photo
+   shows them, and how to take more flattering photos.
+3. **Your measurements.** A compact, plain-English list of how your proportions
+   compare with common reference ranges.
 
-Your answers are saved only in your browser and never uploaded (not even with the
-AI report). "Forget my answers" deletes them.
+Cuts are chosen by length preference, not gender. Your answers are saved only in your
+browser and never uploaded (not even with the AI report).
 
 ## Accuracy
 
@@ -103,6 +107,7 @@ node test/scoring.test.js
 node test/faceshape.test.js
 node test/skin.test.js
 node test/recommendations.test.js
+node test/hairstyles.test.js
 node test/styling.test.js
 node test/profile.test.js
 node test/landmarks-agg.test.js

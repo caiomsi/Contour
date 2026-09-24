@@ -1,14 +1,19 @@
 /* =================================================================
    CONTOUR — styling.js
-   Hair-type-aware styling + care knowledge pack (data) and the pure
-   selectors that turn { faceShape, measurements, profile } into plan
-   items. Consumed by recommendations.js.
+   Turns { faceShape, measurements, profile } into practical, specific
+   advice:
+     hairPlan(ctx)  -> the "Your hair" section: goal for the face shape,
+                       what to skip, the 3 best named cuts (from
+                       hairstyles.js) with barber scripts, a care routine
+                       for the texture, and measured-thirds fringe advice.
+     quickWins(ctx) -> step-by-step grooming items tailored by profile
+                       and measurements: skin routine by skin type,
+                       beard, glasses, brows.
 
    Principles (same ethics as content.js):
-   - Work WITH the person's natural texture — never "fix" it. Every
-     texture gets real options at every length.
-   - Styling only balances proportions visually; nothing here claims to
-     change the face. No medical/drug advice: hair thinning gets gentle
+   - Work WITH the person's natural texture — never "fix" it.
+   - Styling only balances proportions visually; nothing claims to
+     change the face. No medical/drug advice: thinning hair gets gentle
      habits + "a dermatologist can find the cause", nothing more.
    - Length preference, not gender, decides which cuts are offered.
    ================================================================= */
@@ -16,101 +21,56 @@
 (function (root) {
   'use strict';
 
+  var HS = (typeof require !== 'undefined')
+    ? require('./hairstyles.js')
+    : root.ContourHairstyles;
+
   var TEXTURES = ['straight', 'wavy', 'curly', 'coily'];
 
   // What styling aims to do for each face shape.
   var SHAPE_GOALS = {
-    oval:    { goal: 'flexible', aim: 'Your proportions are balanced, so almost any cut works — choose for lifestyle and texture.' },
-    round:   { goal: 'height',   aim: 'Add height and a little angle on top, keep the sides closer, to lengthen the face.' },
-    oblong:  { goal: 'width',    aim: 'Add width at the sides and keep height down, so length doesn’t read as extra length.' },
-    square:  { goal: 'soften',   aim: 'Add softness and movement to offset a strong jaw and forehead; avoid very boxy lines.' },
-    heart:   { goal: 'weightLow', aim: 'Keep the top lighter and put fullness around the jaw and chin to balance a wider forehead.' },
-    diamond: { goal: 'fillEnds', aim: 'Add fullness at the forehead and jaw so the cheekbones aren’t the only wide point.' }
+    oval:    { goal: 'flexible',  aim: 'Your proportions are balanced, so most cuts work — choose for your texture and lifestyle.' },
+    round:   { goal: 'height',    aim: 'Add height on top and keep the sides closer, to lengthen the face.' },
+    oblong:  { goal: 'width',     aim: 'Add width at the sides and keep height down, so the face reads less long.' },
+    square:  { goal: 'soften',    aim: 'Add softness and movement to balance a strong jaw and forehead.' },
+    heart:   { goal: 'weightLow', aim: 'Keep the top light and add fullness around the jaw to balance a wider forehead.' },
+    diamond: { goal: 'fillEnds',  aim: 'Add fullness at the forehead and jaw so the cheekbones aren’t the only wide point.' }
   };
 
-  // CUTS[goal][texture] = { short, medium, long }
-  var CUTS = {
-    flexible: {
-      straight: { short: 'a textured crop or classic side part', medium: 'a layered cut at collar or chin length', long: 'long layers or a blunt one-length cut' },
-      wavy:     { short: 'a short textured cut that leaves the wave on top', medium: 'a shag or shoulder-length layers that let the wave move', long: 'long face-framing layers' },
-      curly:    { short: 'a tapered cut with defined curls on top', medium: 'a rounded curly shape cut dry, curl by curl', long: 'long layered curls with shape kept all round' },
-      coily:    { short: 'a tapered cut, low fade or a close crop', medium: 'a shaped afro, twist-out or two-strand twists', long: 'twists, locs, braids or a full picked-out afro' }
-    },
-    height: {
-      straight: { short: 'a textured quiff or short pompadour with tighter sides', medium: 'a side part with lift at the crown and a longer top', long: 'long layers starting below the chin with volume at the crown; skip a centre part that sits flat' },
-      wavy:     { short: 'a short cut with length on top, waves pushed up and back', medium: 'a layered shag with lift at the roots and closer sides', long: 'long layers with crown lift; let waves start below the cheekbones' },
-      curly:    { short: 'a curly top with a taper or fade at the sides', medium: 'curls stacked higher on top, trimmed closer at the sides', long: 'long curls with height at the crown — a pineapple or high half-up style works well' },
-      coily:    { short: 'a high-top, sponge-twisted top or tapered afro with low sides', medium: 'a tapered afro that is taller than it is wide', long: 'a high puff, top bun, or twists/locs styled up' }
-    },
-    width: {
-      straight: { short: 'a side-parted cut with some fullness at the sides; keep the top low', medium: 'a chin-length bob or layered cut that sits wide at the cheekbones', long: 'long layers with a fringe or curtain bangs, and waves or volume at the sides' },
-      wavy:     { short: 'a textured cut with the wave pushed out to the sides, not up', medium: 'a shoulder-length shag with fullness at cheek level', long: 'waves that sit wide from the cheekbones down, with a fringe to shorten length' },
-      curly:    { short: 'a rounded curly crop, even length all round rather than tall', medium: 'a rounded curly shape that is wider than it is tall', long: 'volume at the sides with curtain bangs; avoid piling height on top' },
-      coily:    { short: 'an even rounded crop or low taper without extra height', medium: 'a rounded afro or twist-out shaped wide rather than tall', long: 'side-parted twists or braids, or a wide afro; skip high buns' }
-    },
-    soften: {
-      straight: { short: 'a textured, slightly messy crop or a soft side-swept fringe', medium: 'a layered cut with soft, longer pieces around the jaw', long: 'long layers with face-framing pieces and a side part' },
-      wavy:     { short: 'a short cut with loose, textured movement on top', medium: 'a soft shag or wavy bob that ends below the jaw', long: 'long, loose waves with face-framing layers' },
-      curly:    { short: 'curls kept loose and a little longer on top, softly tapered', medium: 'a rounded curly cut that frames the face', long: 'long layered curls; avoid a sharp one-length line at the jaw' },
-      coily:    { short: 'a tapered cut with a rounded, not squared-off, shape up', medium: 'a rounded twist-out or soft afro', long: 'twists or locs worn down to soften angles, or a side-swept style' }
-    },
-    weightLow: {
-      straight: { short: 'a side-swept fringe with a longer, textured top; avoid lots of volume up top', medium: 'a chin-to-collar length cut that is fuller at the ends', long: 'long layers that start at the chin, with side-swept bangs' },
-      wavy:     { short: 'a short cut with a soft fringe falling to one side', medium: 'a lob or shoulder-length cut with waves fullest around the jaw', long: 'long waves that start at the jaw, lighter at the crown' },
-      curly:    { short: 'curls kept lighter on top with a soft fringe', medium: 'a curly cut shaped fullest at chin level (an inverted-triangle shape)', long: 'long curls with most volume from the jaw down' },
-      coily:    { short: 'a close, even crop that keeps the top low', medium: 'a twist-out or afro shaped fuller at the sides and bottom', long: 'twists or braids worn down, or a low bun at the nape' }
-    },
-    fillEnds: {
-      straight: { short: 'a fringe or textured top that covers part of the forehead, with some fullness at the sides', medium: 'a chin-length cut with a fringe', long: 'long layers with a fringe and fullness from the jaw down' },
-      wavy:     { short: 'a short wavy cut with a fringe falling forward', medium: 'a wavy bob or shag with bangs', long: 'long waves with curtain bangs and volume at jaw level' },
-      curly:    { short: 'curls worn forward with a curly fringe', medium: 'a curly shape with a fringe and fullness at the chin', long: 'long curls with a curly fringe; keep the sides from sitting flat' },
-      coily:    { short: 'a rounded crop with some forward-brushed fullness', medium: 'a rounded afro or twist-out with fullness at forehead and jaw level', long: 'twists or locs with a front section brought forward, or a full rounded afro' }
-    }
-  };
-
-  // Care by texture, adjusted for thickness.
+  // Hair care routine by texture (numbered steps).
   var CARE = {
-    straight: 'Wash every 1–3 days if it gets oily at the roots, using a gentle shampoo; condition from mid-length to ends only. Use heat protectant before blow-drying or straightening, and keep tools on medium heat.',
-    wavy: 'Wash 2–3 times a week and use a light conditioner every time. Apply a light mousse, gel or sea-salt spray to damp hair, scrunch upward, then air-dry or use a diffuser. Brushing dry waves breaks them up; use fingers or a wide-tooth comb in the shower.',
-    curly: 'Wash 1–2 times a week with a sulfate-free shampoo (or a co-wash between washes) and condition generously every time. Detangle only when hair is wet and full of conditioner. Apply a leave-in plus a curl cream or gel to soaking-wet hair, then diffuse or air-dry without touching. Sleep on a satin/silk pillowcase or in a bonnet or pineapple.',
-    coily: 'Keep it moisturised: wash every 1–2 weeks, deep-condition every time, and use the LOC/LCO order (liquid or leave-in, then oil and cream) to lock water in. Detangle in sections with fingers or a wide-tooth comb, from the ends up. Low-manipulation and protective styles (twists, braids) reduce breakage. Cover hair at night with satin or silk.'
+    straight: [
+      'Wash every 1–3 days — as often as your roots get oily — with a gentle shampoo.',
+      'Condition from mid-length to the ends only, not the roots.',
+      'Use heat protectant before blow-drying or straightening, and keep tools on medium heat.',
+      'Between washes, a little dry shampoo at the roots adds volume.'
+    ],
+    wavy: [
+      'Wash 2–3 times a week and condition every time.',
+      'Apply a light mousse, gel or sea-salt spray to damp hair and scrunch upward.',
+      'Air-dry or diffuse on low. Don’t brush waves once dry — use your fingers.',
+      'Refresh second-day waves with a mist of water and a quick scrunch.'
+    ],
+    curly: [
+      'Wash 1–2 times a week with a sulfate-free shampoo; use a co-wash (conditioner-only wash) in between if needed.',
+      'Detangle only when wet and full of conditioner, with fingers or a wide-tooth comb.',
+      'On soaking-wet hair: leave-in, then curl cream or gel, scrunched upward.',
+      'Diffuse on low or air-dry without touching; scrunch out any crunch once dry.',
+      'Sleep on a satin or silk pillowcase, in a bonnet, or with curls in a loose high “pineapple”.'
+    ],
+    coily: [
+      'Wash every 1–2 weeks and deep-condition every time.',
+      'Seal moisture in with the LOC order: liquid or leave-in, then oil, then cream.',
+      'Detangle in sections, from the ends up, with fingers or a wide-tooth comb.',
+      'Use low-manipulation and protective styles (twists, braids) to cut breakage.',
+      'Cover hair at night with a satin bonnet or durag, or use a satin pillowcase.'
+    ]
   };
-  var THICKNESS_NOTE = {
-    fine: 'Fine strands get weighed down easily: choose lightweight products (mousse, light sprays), keep oils to the very ends, and don’t use too much conditioner.',
-    medium: '',
-    coarse: 'Coarse strands can take richer products — creams, butters and oils — and usually need more moisture and less heat.'
-  };
-
-  // Beard shapes that balance each face shape (full growth).
-  var BEARD = {
-    oval: 'Most beard styles suit you; a short, even boxed beard or neat stubble keeps the balance.',
-    round: 'Keep the cheeks shorter and the chin longer — a goatee, anchor or short pointed boxed beard lengthens the face.',
-    oblong: 'Keep fullness at the sides and the chin short: a full, even-length beard or mutton-chop-style sides adds width.',
-    square: 'Round the corners: a short beard that is a little longer at the chin and tapered at the jaw angles softens a strong jaw.',
-    heart: 'A fuller beard at the chin and jaw (a short full beard or a chin-strap with a goatee) adds weight lower down.',
-    diamond: 'Keep fullness at the chin and along the jaw to add width there; keep the cheeks tidy.'
-  };
-  var BEARD_PATCHY = 'With patchy or light growth, short even stubble (about 3–5 mm) or a neat goatee/moustache usually looks fuller than growing it out. A beard trimmer with guards and a clean neckline do most of the work.';
-
-  // Eyewear frames that balance each face shape.
-  var EYEWEAR = {
-    oval: 'Most frames suit you; pick ones about as wide as the widest part of your face, with a top line that follows your brows.',
-    round: 'Angular, rectangular or geometric frames that are slightly wider than tall add structure.',
-    oblong: 'Deeper (taller) frames with decorative temples or a strong brow line break up length; avoid small narrow frames.',
-    square: 'Round, oval or softly curved frames balance a strong jaw; avoid very boxy shapes.',
-    heart: 'Frames that are wider at the bottom, round or rimless styles, and light colours balance a wider forehead.',
-    diamond: 'Cat-eye, oval or frames with detail along the top widen the forehead line; rimless styles work too.'
-  };
-
-  // Skin-type tweaks to the daily routine.
-  var SKIN_TYPE = {
-    oily: 'Use a gel or foaming cleanser and a lightweight, oil-free gel moisturiser; choose a fluid or gel sunscreen labelled non-comedogenic. Blotting papers work better during the day than washing again.',
-    dry: 'Use a cream or milky cleanser and a richer moisturiser (ceramides, glycerin), applied to slightly damp skin. Keep showers warm, not hot, and pick a moisturising cream sunscreen.',
-    combination: 'Cleanse gently, use a light lotion all over and a little extra moisturiser only where you’re dry. A fluid sunscreen suits most combination skin.',
-    sensitive: 'Keep the routine short and fragrance-free: a gentle cleanser, a plain moisturiser, and a mineral sunscreen (zinc oxide/titanium dioxide). Add any new product one at a time and patch-test first.'
+  var THICKNESS_STEP = {
+    fine: 'Fine strands: use light products (mousse, sprays), keep oils to the very ends, and go easy on conditioner.',
+    coarse: 'Coarse strands: richer creams, butters and oils work well, and less heat keeps them healthier.'
   };
 
-  // Fringe / forehead styling by texture (used with measured thirds).
   var FRINGE_ON = {
     straight: 'a soft side-swept or curtain fringe',
     wavy: 'curtain bangs that follow your wave',
@@ -118,128 +78,201 @@
     coily: 'a front section of twists or curls brought forward'
   };
   var FRINGE_OFF = {
-    straight: 'brushed back or off the face with a side part',
-    wavy: 'waves pushed back from the face',
-    curly: 'curls swept up and back from the hairline',
-    coily: 'a clean edge with the front kept up or back'
+    straight: 'Brush it back or to the side',
+    wavy: 'Push your waves back from your face',
+    curly: 'Sweep your curls up and back from the hairline',
+    coily: 'Keep a clean edge with the front styled up or back'
   };
 
-  var THINNING = 'Choose shorter, textured cuts: they make thinner areas look fuller more reliably than growing hair long to cover them. Avoid tight ponytails, braids or buns that pull at the hairline, handle wet hair gently, and eat enough protein and iron. Thinning has many possible causes, so a dermatologist is the right person to find yours.';
+  var THINNING = [
+    'Shorter textured cuts (a crop, crew cut or buzz) make thinner areas look fuller than growing hair long to cover them.',
+    'Use matte products, not shiny gels — shine shows more scalp.',
+    'Avoid tight ponytails, braids or buns that pull at the hairline, and handle wet hair gently.',
+    'Eat enough protein and iron.',
+    'Thinning has many possible causes; a dermatologist can find yours.'
+  ];
 
-  /* Pure selector: plan items for a profile. Returns [] without one.
-     ctx = { faceShape (classify() result), measurements?, profile } */
-  function recsFor(ctx) {
-    var p = ctx.profile || {}, fs = ctx.faceShape, out = [];
-    if (!p || !Object.keys(p).length) return out;
-    var shape = fs && fs.shape, second = fs && fs.leaning ? fs.secondary : null;
-    var shapeDesc = shape ? (second ? shape + ', leaning ' + second : shape) : null;
-    var tex = p.hairTexture, len = p.lengthPref;
+  // Beard shape that balances each face shape (full growth).
+  var BEARD = {
+    oval: 'Most shapes suit you — a short, even boxed beard or neat stubble keeps the balance.',
+    round: 'Keep the cheeks short and let the chin grow a little longer (a short pointed or anchor shape) to lengthen the face.',
+    oblong: 'Keep fullness at the sides and the chin short — an even-length full beard adds width.',
+    square: 'Round off the corners: slightly longer at the chin, tapered short at the jaw angles.',
+    heart: 'Go fuller at the chin and along the jaw (a short full beard) to add weight lower down.',
+    diamond: 'Keep fullness at the chin and along the jaw; keep the cheeks tidy.'
+  };
 
-    // ---- cut for shape × texture × length ----
-    if (tex && shape && SHAPE_GOALS[shape]) {
-      var g = SHAPE_GOALS[shape], cuts = CUTS[g.goal][tex];
-      var lens = (len && len !== 'open') ? [len] : ['short', 'medium', 'long'];
-      var list = lens.map(function (l) { return (lens.length > 1 ? cap(l) + ': ' : '') + cuts[l] + '.'; });
-      var body = g.aim + ' ' + (lens.length > 1 ? 'Options for ' + tex + ' hair — ' + list.join(' ') : 'For ' + tex + ' hair at ' + len + ' length: ' + list[0]);
-      if (second && SHAPE_GOALS[second] && SHAPE_GOALS[second].goal !== g.goal) {
-        body += ' Because you also lean ' + second + ', ' + lowerFirst(SHAPE_GOALS[second].aim);
+  // Frames that balance each face shape.
+  var EYEWEAR = {
+    oval: 'Most frames suit you — pick a shape about as wide as the widest part of your face.',
+    round: 'Angular or rectangular frames, slightly wider than they are tall, add structure.',
+    oblong: 'Deeper (taller) frames with a strong top line break up length; avoid small, narrow frames.',
+    square: 'Round, oval or softly curved frames balance a strong jaw; avoid very boxy shapes.',
+    heart: 'Frames that are wider at the bottom, round or rimless styles, and lighter colours balance a wider forehead.',
+    diamond: 'Oval, cat-eye or frames with detail along the top widen the brow line.'
+  };
+
+  var SKIN = {
+    oily:        { cleanser: 'a gel or foaming cleanser', moist: 'a light, oil-free gel moisturiser', spf: 'a fluid or gel SPF 30+ labelled non-comedogenic', active: 'a salicylic-acid (BHA) product 2–3 nights a week for shine and clogged pores' },
+    dry:         { cleanser: 'a cream or milky cleanser (or just rinse with water in the morning)', moist: 'a rich cream with ceramides or glycerin, on slightly damp skin', spf: 'a moisturising cream SPF 30+', active: 'a gentle retinol 2 nights a week, over moisturiser, for texture — build up slowly' },
+    combination: { cleanser: 'a gentle gel cleanser', moist: 'a light lotion, with extra cream only on dry patches', spf: 'a fluid SPF 30+', active: 'a gentle retinol or mild exfoliating acid 2–3 nights a week, introduced slowly' },
+    sensitive:   { cleanser: 'a fragrance-free, gentle cream cleanser', moist: 'a plain, fragrance-free moisturiser', spf: 'a mineral SPF 30+ (zinc oxide or titanium dioxide)', active: null },
+    unsure:      { cleanser: 'a gentle, fragrance-free cleanser', moist: 'a light, fragrance-free moisturiser', spf: 'a broad-spectrum SPF 30+', active: 'one active (a gentle retinol or mild exfoliating acid) 2–3 nights a week, introduced slowly' }
+  };
+
+  function lowerFirst(s) { return s.charAt(0).toLowerCase() + s.slice(1); }
+  function shapeLabel(fs) {
+    if (!fs || !fs.shape) return null;
+    return fs.leaning && fs.secondary ? fs.shape + ', leaning ' + fs.secondary : fs.shape;
+  }
+
+  /* ---- the "Your hair" section ----
+     ctx = { faceShape, measurements?, profile?, hairlineKnown? } */
+  function hairPlan(ctx) {
+    var p = ctx.profile || {}, fs = ctx.faceShape || {};
+    var shape = SHAPE_GOALS[fs.shape] ? fs.shape : 'oval';
+    var g = SHAPE_GOALS[shape];
+    var secShape = fs.leaning && SHAPE_GOALS[fs.secondary] ? fs.secondary : null;
+    var secGoal = secShape && SHAPE_GOALS[secShape].goal !== g.goal ? SHAPE_GOALS[secShape].goal : null;
+    var tex = TEXTURES.indexOf(p.hairTexture) >= 0 ? p.hairTexture : null;
+    var thinning = p.hairConcern === 'thinning';
+
+    var plan = {
+      shape: shape, shapeLabel: shapeLabel(fs) || shape, goal: g.goal, aim: g.aim,
+      alsoAim: secGoal ? 'You also lean ' + secShape + ': ' + lowerFirst(SHAPE_GOALS[secShape].aim) : null,
+      avoid: HS.AVOID[g.goal].slice(),
+      needsTexture: !tex, texture: tex, lengthPref: p.lengthPref || 'open',
+      styles: [], care: null, fringe: null, thinning: null
+    };
+    if (!tex) return plan;
+
+    plan.styles = HS.pick(tex, { primary: g.goal, secondary: secGoal }, p.lengthPref || 'open', 3, { preferShort: thinning });
+
+    var th = p.hairThickness;
+    plan.care = {
+      title: 'Care routine for ' + (th && th !== 'medium' ? th + ', ' : '') + tex + ' hair',
+      steps: CARE[tex].concat(THICKNESS_STEP[th] ? [THICKNESS_STEP[th]] : [])
+    };
+
+    var t3 = ctx.measurements && ctx.measurements.thirds;
+    if (t3 && typeof t3.upper === 'number' && ctx.hairlineKnown !== false) {
+      var pct = Math.round(t3.upper * 100);
+      if (t3.upper > 0.36) {
+        plan.fringe = { title: 'A fringe would balance your forehead',
+          body: 'Try ' + FRINGE_ON[tex] + '. It shortens the forehead section so your face reads more evenly top to bottom.',
+          because: 'Your forehead is ' + pct + '% of your face height (about 33% is even).' };
+      } else if (t3.upper < 0.30) {
+        plan.fringe = { title: 'Keep your forehead open',
+          body: FRINGE_OFF[tex] + '. Showing more forehead evens out your proportions; a heavy fringe would shorten it further.',
+          because: 'Your forehead is ' + pct + '% of your face height (about 33% is even).' };
       }
-      out.push({
-        id: 'hair-cut', category: 'hair', priority: 7,
-        title: 'A cut for your face shape and ' + tex + ' hair',
-        body: body,
-        why: 'Where a cut adds or removes volume changes how proportions read. Working with your natural texture means less daily styling and less heat.',
-        because: 'your face reads ' + shapeDesc + ' and you told Contour your hair is ' + tex
-      });
     }
+    if (thinning) plan.thinning = { title: 'If your hair is thinning', steps: THINNING.slice() };
+    return plan;
+  }
 
-    // ---- care routine for texture (+ thickness) ----
-    if (tex) {
-      var th = p.hairThickness, note = th ? THICKNESS_NOTE[th] : '';
-      out.push({
-        id: 'hair-care', category: 'hair', priority: 6,
-        title: 'Care routine for ' + (th && th !== 'medium' ? th + ', ' : '') + tex + ' hair',
-        body: CARE[tex] + (note ? ' ' + note : ''),
-        why: 'Each texture holds moisture and oil differently. A routine that suits yours keeps it healthier and makes any cut look better.',
-        because: 'you told Contour your hair is ' + (th ? th + ' and ' : '') + tex
-      });
-    }
+  /* ---- step-by-step grooming wins tailored by profile + measurements ----
+     Items: { id, category, title, body, steps, priority, because } */
+  function quickWins(ctx) {
+    var p = ctx.profile || {}, fs = ctx.faceShape || {}, m = ctx.measurements || {}, out = [];
+    var shape = BEARD[fs.shape] ? fs.shape : null;
+    var label = shapeLabel(fs);
 
-    // ---- fringe / forehead, driven by the measured upper third ----
-    var th3 = ctx.measurements && ctx.measurements.thirds;
-    if (tex && th3 && typeof th3.upper === 'number' && ctx.hairlineKnown !== false) {
-      if (th3.upper > 0.36) {
-        out.push({
-          id: 'hair-fringe', category: 'hair', priority: 5,
-          title: 'Consider a fringe',
-          body: 'Your upper third (hairline to brows) measures a little taller than the other two, so a fringe can balance it: ' + FRINGE_ON[tex] + ' works with your texture.',
-          why: 'A fringe visually shortens the forehead section, evening out the three vertical thirds.',
-          because: 'your forehead section measured ' + Math.round(th3.upper * 100) + '% of face height (about 33% is even)'
-        });
-      } else if (th3.upper < 0.30) {
-        out.push({
-          id: 'hair-fringe', category: 'hair', priority: 4,
-          title: 'Keep your forehead open',
-          body: 'Your upper third measures a little shorter than the other two, so wearing hair ' + FRINGE_OFF[tex] + ' shows more of it. A heavy fringe would shorten it further.',
-          why: 'Showing more forehead lengthens the upper third, evening out the vertical proportions.',
-          because: 'your forehead section measured ' + Math.round(th3.upper * 100) + '% of face height (about 33% is even)'
-        });
-      }
-    }
+    // skin routine — always; tailored when the skin type is known
+    var st = SKIN[p.skinType] ? p.skinType : 'unsure';
+    var k = SKIN[st];
+    var steps = [
+      'Morning: wash with ' + k.cleanser + '.',
+      'Morning: apply ' + k.moist + '.',
+      'Morning: finish with ' + k.spf + ' — about two finger-lengths for face and neck. Reapply if you’re outside for hours.',
+      'Evening: cleanse (if you wore sunscreen or makeup, massage in a cleansing balm or oil first), then moisturise.'
+    ];
+    steps.push(k.active
+      ? 'Once that’s a habit (2–3 weeks), you can add ' + k.active + '. Patch-test first.'
+      : 'Skip strong actives for now; add any new product one at a time, patch-testing on your jaw first.');
+    out.push({
+      id: 'skin-routine', category: 'skin', priority: 6,
+      title: st === 'unsure' ? 'A simple daily skin routine' : 'Daily routine for ' + st + ' skin',
+      body: 'Five minutes a day. Daily sunscreen is the single biggest thing you can do for your skin’s tone and texture.',
+      steps: steps,
+      because: st === 'unsure' ? null : 'you told Contour your skin is ' + st
+    });
 
-    // ---- beard ----
+    // beard
     if (shape && (p.facialHair === 'full' || p.facialHair === 'patchy')) {
+      var patchy = p.facialHair === 'patchy';
       out.push({
         id: 'beard', category: 'grooming', priority: 5,
-        title: p.facialHair === 'patchy' ? 'Make light facial hair look intentional' : 'A beard shape for your face',
-        body: p.facialHair === 'patchy' ? BEARD_PATCHY + ' If you grow it longer: ' + lowerFirst(BEARD[shape]) : BEARD[shape],
-        why: 'A beard changes the outline of the lower face, so its shape can balance your proportions.',
-        because: 'your face reads ' + shapeDesc + ' and your facial hair grows ' + (p.facialHair === 'patchy' ? 'patchy or light' : 'in full')
+        title: patchy ? 'Make light facial hair look intentional' : 'Shape your beard for your face',
+        body: patchy
+          ? 'Short and even beats long and patchy. Clean lines make any length look deliberate.'
+          : BEARD[shape],
+        steps: patchy ? [
+          'Let it grow 4–6 weeks without trimming before you judge how it fills in.',
+          'If it’s still patchy, keep it at even stubble — a #1–2 guard (3–6 mm) makes gaps disappear.',
+          'Shave a clean neckline 1–2 finger-widths above your Adam’s apple, curving up to just behind the jaw corner.',
+          'Tidy stray cheek hairs, but keep your natural cheek line — lowering it makes the face look wider.',
+          'If your moustache and chin fill in best, a goatee or moustache-and-chin shape is a good alternative.'
+        ] : [
+          'Trim once a week with a guarded trimmer — a #2–4 guard (6–13 mm) for a short beard.',
+          'Shave a clean neckline 1–2 finger-widths above your Adam’s apple, curving up to just behind the jaw corner.',
+          'Keep your natural cheek line and only remove strays — lowering it makes the face look wider.',
+          'Use a few drops of beard oil or balm daily, and wash the beard 2–3 times a week.'
+        ],
+        because: 'your face reads ' + label + ' and your facial hair grows ' + (patchy ? 'patchy or light' : 'in full')
       });
     }
 
-    // ---- eyewear ----
+    // glasses
     if (shape && p.glasses === 'yes') {
       out.push({
         id: 'eyewear', category: 'grooming', priority: 4,
-        title: 'Glasses frames for your face shape',
+        title: 'Choose frames that fit your face',
         body: EYEWEAR[shape],
-        why: 'Frames sit right on the face’s centre line, so their shape noticeably shifts how proportions read.',
-        because: 'you wear glasses and your face reads ' + shapeDesc
+        steps: [
+          'Width: the frame should be about as wide as your face at the temples — no gap at the sides and no overhang.',
+          'Height: the top of the frame should follow your brows, not cover them or sit far below.',
+          'Your eyes should sit near the centre of each lens.',
+          'If they slide down, ask the optician to adjust the nose pads or arms — it’s usually free.'
+        ],
+        because: 'you wear glasses and your face reads ' + label
       });
     }
 
-    // ---- skin type ----
-    if (p.skinType && SKIN_TYPE[p.skinType]) {
-      out.push({
-        id: 'skin-type', category: 'skin', priority: 6,
-        title: 'Match your routine to ' + p.skinType + ' skin',
-        body: SKIN_TYPE[p.skinType],
-        why: 'The right texture of cleanser, moisturiser and sunscreen for your skin type makes a daily routine easier to stick to.',
-        because: 'you told Contour your skin is ' + p.skinType
-      });
+    // brows — always useful; tailored to measured eye spacing / tilt
+    var extra = [], reasons = [];
+    var ratio = m.interocular && m.interocular.ratio;
+    if (typeof ratio === 'number' && ratio > 1.40) {
+      extra.push('Your eyes are set a little wider apart than average: keep the inner ends of your brows full, and fill slightly toward your nose with a brow pencil or tinted gel if you like.');
+      reasons.push('your eye spacing measured ' + ratio.toFixed(2) + '× your eye width');
+    } else if (typeof ratio === 'number' && ratio < 1.13) {
+      extra.push('Your eyes are set a little closer than average: tidy the inner ends so each brow starts right above the inner corner of your eye — it opens up the space between them.');
+      reasons.push('your eye spacing measured ' + ratio.toFixed(2) + '× your eye width');
     }
+    var tilt = m.canthal && m.canthal.avg;
+    if (typeof tilt === 'number' && tilt < -1) {
+      extra.push('Your outer eye corners sit slightly lower than the inner ones: keep the brow tail level or slightly lifted, and trim long hairs that pull it downward.');
+      reasons.push('your eye tilt measured ' + tilt.toFixed(1) + '°');
+    }
+    out.push({
+      id: 'brows', category: 'eyes', priority: extra.length ? 5 : 3,
+      title: 'Groom your brows to frame your eyes',
+      body: 'Neat brows are the quickest way to make eyes look more open and balanced — no reshaping needed.',
+      steps: [
+        'Brush your brows upward with clear brow gel (or a spoolie and a little soap).',
+        'After brushing up, trim only the hairs that stick out above the top line, with small scissors.',
+        'Tweeze strays below the brow and between the brows. Each brow should start roughly above the inner corner of your eye.'
+      ].concat(extra).concat(['Leave the tails full — over-thinned brows make the face look tired.']),
+      because: reasons.length ? reasons.join(' and ') : null
+    });
 
-    // ---- thinning (lifestyle-only) ----
-    if (p.hairConcern === 'thinning') {
-      out.push({
-        id: 'hair-thinning', category: 'hair', priority: 6,
-        title: 'Styling and habits for thinning hair',
-        body: THINNING,
-        why: 'Gentle handling prevents avoidable breakage, and a dermatologist can tell whether something treatable is behind it.',
-        because: 'you mentioned thinning or a receding hairline'
-      });
-    }
     return out;
   }
 
-  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-  function lowerFirst(s) { return s.charAt(0).toLowerCase() + s.slice(1); }
-
   var api = {
-    TEXTURES: TEXTURES, SHAPE_GOALS: SHAPE_GOALS, CUTS: CUTS, CARE: CARE, THICKNESS_NOTE: THICKNESS_NOTE,
-    BEARD: BEARD, BEARD_PATCHY: BEARD_PATCHY, EYEWEAR: EYEWEAR, SKIN_TYPE: SKIN_TYPE,
-    FRINGE_ON: FRINGE_ON, FRINGE_OFF: FRINGE_OFF, THINNING: THINNING, recsFor: recsFor
+    TEXTURES: TEXTURES, SHAPE_GOALS: SHAPE_GOALS, CARE: CARE, THICKNESS_STEP: THICKNESS_STEP,
+    FRINGE_ON: FRINGE_ON, FRINGE_OFF: FRINGE_OFF, THINNING: THINNING, BEARD: BEARD, EYEWEAR: EYEWEAR,
+    SKIN: SKIN, hairPlan: hairPlan, quickWins: quickWins, shapeLabel: shapeLabel
   };
   root.ContourStyling = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
